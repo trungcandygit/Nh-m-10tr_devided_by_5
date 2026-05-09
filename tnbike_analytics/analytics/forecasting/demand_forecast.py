@@ -21,10 +21,17 @@ def prepare_series(df: pd.DataFrame, group_code: str) -> pd.DataFrame:
     return ts.sort_values("ds")
 
 
-def forecast_group(ts: pd.DataFrame, periods: int = 90) -> pd.DataFrame:
+def forecast_group(ts: pd.DataFrame, periods: int = 91) -> pd.DataFrame:
     """Chạy Prophet cho 1 nhóm SP, trả về forecast df."""
     from prophet import Prophet
+    # Dùng logistic growth với floor=0 để không dự báo âm
+    ts = ts.copy()
+    cap   = ts["y"].max() * 2.5
+    ts["cap"]   = cap
+    ts["floor"] = 0.0
+
     model = Prophet(
+        growth                  = "logistic",
         yearly_seasonality      = True,
         weekly_seasonality      = False,
         seasonality_mode        = "multiplicative",
@@ -33,8 +40,13 @@ def forecast_group(ts: pd.DataFrame, periods: int = 90) -> pd.DataFrame:
     model.add_country_holidays(country_name="VN")
     model.fit(ts)
 
-    future   = model.make_future_dataframe(periods=periods)
+    future          = model.make_future_dataframe(periods=periods)
+    future["cap"]   = cap
+    future["floor"] = 0.0
     forecast = model.predict(future)
+    # Clip phòng trường hợp con số âm nhỏ từ interval
+    for col in ["yhat", "yhat_lower", "yhat_upper"]:
+        forecast[col] = forecast[col].clip(lower=0)
     return forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]]
 
 
