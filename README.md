@@ -8,50 +8,65 @@ Phạm vi: Q1-2025 + Q1-2026 | 702 đại lý | 247 SKU | 5 nhóm sản phẩm
 ## Cấu trúc dự án
 
 ```
-tnbike_analytics/
+Nh-m-10tr_devided_by_5/               # Repo root
 │
-├── export_master.py             # ENTRY POINT — SQL → 2 CSV dashboard
+├── .gitignore                         # Loại trừ de_thi/emails/ và de_thi/pdfs/
+├── README.md
 │
-├── analytics/
-│   └── sql_data_loader.py       # Parse sql/02_import_data.sql → DataFrames
-│                                # (không cần PostgreSQL)
+├── de_thi/                            # Đề thi + dữ liệu gốc
+│   ├── emails/                        # 1.132 file .eml (gitignored)
+│   ├── pdfs/                          # 1.132 file .pdf (gitignored)
+│   ├── tnbike_emails_mar2026.rar
+│   ├── tnbike_pdfs_mar2026.rar
+│   ├── 01_create_tables.sql
+│   ├── 02_import_data.sql
+│   └── DataExplorers2026 - Đề thi Vòng 2 (2).pdf
 │
-├── pipeline/                    # Hạng mục A — Xử lý email + PDF T3/2026
-│   ├── email_parser.py          # Parse .eml, trích metadata + PDF attachment
-│   ├── pdf_extractor.py         # Bóc nội dung PDF đặt hàng (pdftotext)
-│   ├── validator.py             # Kiểm tra hợp lệ trước khi ghi DB
-│   ├── db_connection.py         # PostgreSQL context manager
-│   ├── db_writer.py             # Ghi email_log → sales_order → order_line
-│   └── run_pipeline.py          # Entry point: xử lý 1.132 email T3/2026
-│
-├── sql/
-│   ├── 01_create_tables.sql     # Schema: 9 bảng + 4 views + triggers
-│   ├── 02_import_data.sql       # Data Q1-2025 + Q1-2026 (17.031 dòng)
-│   ├── 03_email_log.sql         # Bảng log pipeline A
-│   ├── 04_dim_date.sql          # Dimension ngày (mùa vụ VN)
-│   └── 05_views_extra.sql       # Views tổng hợp
-│
-├── tests/
-│   ├── test_analytics.py        # 21 tests — analytics core (không cần DB)
-│   ├── test_email_parser.py
-│   ├── test_pdf_extractor.py
-│   └── test_validator.py
-│
-├── data/
-│   ├── raw/emails/              # Đặt file .eml vào đây (gitignored)
-│   └── raw/pdfs/                # Đặt file .pdf vào đây (gitignored)
-│
-└── output/
-    └── master/                  # OUTPUT — 2 CSV dùng cho dashboard
-        ├── fact_full.csv        # 17.031 rows × 48 cols (6 MB)
-        └── agg_master.csv       #  2.097 rows × 70 cols (449 KB)
+└── tnbike_analytics/
+    │
+    ├── export_master.py               # ENTRY POINT — SQL + Email/PDF → 2 CSV
+    │
+    ├── analytics/
+    │   ├── sql_data_loader.py         # Parse sql/02_import_data.sql → DataFrames
+    │   └── t3_loader.py              # Parse 1.132 email+PDF T3/2026 → DataFrame
+    │                                  # (pdftotext, không cần PostgreSQL)
+    │
+    ├── pipeline/                      # Hạng mục A — Xử lý email + PDF T3/2026
+    │   ├── email_parser.py            # Parse .eml, trích metadata + PDF attachment
+    │   ├── pdf_extractor.py           # Bóc nội dung PDF đặt hàng (pdftotext)
+    │   ├── validator.py               # Kiểm tra hợp lệ trước khi ghi DB
+    │   ├── db_connection.py           # PostgreSQL context manager
+    │   ├── db_writer.py               # Ghi email_log → sales_order → order_line
+    │   └── run_pipeline.py            # Entry point: xử lý 1.132 email T3/2026
+    │
+    ├── sql/
+    │   ├── 01_create_tables.sql       # Schema: 9 bảng + 4 views + triggers
+    │   ├── 02_import_data.sql         # Data Q1-2025 + Q1-2026 (17.031 dòng)
+    │   ├── 03_email_log.sql           # Bảng log pipeline A
+    │   ├── 04_dim_date.sql            # Dimension ngày (mùa vụ VN)
+    │   └── 05_views_extra.sql         # Views tổng hợp
+    │
+    ├── tests/
+    │   ├── test_analytics.py          # 21 tests — analytics core (không cần DB)
+    │   ├── test_email_parser.py
+    │   ├── test_pdf_extractor.py
+    │   └── test_validator.py
+    │
+    ├── data/
+    │   ├── raw/emails/  →  ../../de_thi/emails/   # symlink (gitignored)
+    │   └── raw/pdfs/    →  ../../de_thi/pdfs/     # symlink (gitignored)
+    │
+    └── output/
+        └── master/                    # OUTPUT — 2 CSV dùng cho dashboard
+            ├── fact_full.csv          # 25.590 rows × 48 cols (10 MB)
+            └── agg_master.csv         #  2.161 rows × 70 cols (708 KB)
 ```
 
 ---
 
 ## Output CSV
 
-### `output/master/fact_full.csv` — 17.031 rows × 48 cols
+### `output/master/fact_full.csv` — 25.590 rows × 48 cols
 Mỗi row = 1 dòng order line + toàn bộ enrichment join về:
 
 | Nhóm cột | Nội dung |
@@ -65,7 +80,7 @@ Mỗi row = 1 dòng order line + toàn bộ enrichment join về:
 | Khách hàng | cust_cohort_month, cust_rfm_r/f/m, cust_rfm_segment |
 | Churn ML | cust_churn_label, cust_churn_prob, cust_churn_priority |
 
-### `output/master/agg_master.csv` — 2.097 rows × 70 cols
+### `output/master/agg_master.csv` — 2.161 rows × 70 cols
 Tất cả aggregations trong 1 file — dùng cột `grain` để lọc:
 
 | `grain` | Mô tả | Dùng để vẽ |
@@ -105,7 +120,12 @@ forecast = df[df.grain == "forecast_daily"]
 ```bash
 pip install -r requirements.txt
 
-# Tạo 2 CSV dashboard
+# Giải nén dữ liệu email/PDF (nếu chưa có)
+cd de_thi
+unrar e tnbike_emails_mar2026.rar emails/
+unrar e tnbike_pdfs_mar2026.rar   pdfs/
+
+# Tạo 2 CSV dashboard (tự động parse email+PDF, không cần DB)
 python tnbike_analytics/export_master.py
 
 # Chạy tests
@@ -116,12 +136,17 @@ cd tnbike_analytics && pytest tests/
 ```
 INFO  0. Loading fact table from SQL...
 INFO     17,031 rows | 2025-01-02 → 2026-02-28
+INFO  0b. Loading T3/2026 from emails + PDFs...
+INFO     T3: 1112 orders OK | 20 lỗi | 8559 order lines | revenue=39,909,335,753
+INFO     Ghép T3: tổng 25,590 rows
 INFO  1. Computing SKU enrichment...
 INFO  2. Computing customer RFM + Churn ML...
-INFO     ROC-AUC (held-out test): 0.841
+INFO     ROC-AUC train (overfit check): 0.732
+INFO     ROC-AUC held-out test:         0.841
+INFO     Overfit gap (train-test):      -0.044
 INFO  3. Running Prophet forecast...
-INFO  4. Building fact_full.csv...   → 17,031 rows × 48 cols
-INFO  5. Building agg_master.csv...  →  2,097 rows × 70 cols
+INFO  4. Building fact_full.csv...   → 25,590 rows × 48 cols
+INFO  5. Building agg_master.csv...  →  2,161 rows × 70 cols
 ```
 
 ---
