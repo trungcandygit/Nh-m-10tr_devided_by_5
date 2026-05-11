@@ -19,7 +19,7 @@ Output → output/master/
 
 Train / Test split:
   Churn   : features Q1-2025 | label = mua lại Q1-2026 | 80/20 stratified
-            Pipeline(StandardScaler + GBM) — zero data leakage
+            Pipeline(StandardScaler + LogisticRegression) — zero data leakage
   Forecast: train 2025-01→2026-01 | test 2026-02 | forecast 2026-03→06
 """
 
@@ -138,7 +138,7 @@ log.info("2. Computing customer RFM + Churn ML...")
 
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedShuffleSplit, cross_val_score
 from sklearn.metrics import roc_auc_score, classification_report
 
@@ -211,15 +211,18 @@ sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
 tr_idx, te_idx = next(sss.split(X, y))
 
 pipe = Pipeline([("sc", StandardScaler()),
-                 ("cl", GradientBoostingClassifier(n_estimators=200, learning_rate=0.05,
-                                                    max_depth=3, random_state=42))])
+                 ("cl", LogisticRegression(C=1.0, max_iter=1000, random_state=42))])
 cv = cross_val_score(pipe, X[tr_idx], y[tr_idx], cv=5, scoring="roc_auc")
 log.info(f"   CV ROC-AUC (train-only): {cv.mean():.3f} ± {cv.std():.3f}")
 
 pipe.fit(X[tr_idx], y[tr_idx])
+prob_tr = pipe.predict_proba(X[tr_idx])[:,1]
+roc_tr  = roc_auc_score(y[tr_idx], prob_tr)
 prob_te = pipe.predict_proba(X[te_idx])[:,1]
 roc_te  = roc_auc_score(y[te_idx], prob_te)
-log.info(f"   ROC-AUC (held-out test): {roc_te:.3f}")
+log.info(f"   ROC-AUC train (overfit check): {roc_tr:.3f}")
+log.info(f"   ROC-AUC held-out test:         {roc_te:.3f}")
+log.info(f"   Overfit gap (train-test):      {roc_tr - roc_te:+.3f}")
 log.info(f"\n{classification_report(y[te_idx],(prob_te>=.5).astype(int),zero_division=0)}")
 
 cdf["churn_prob"]     = pipe.predict_proba(X)[:,1].round(4)
