@@ -35,6 +35,7 @@ log = logging.getLogger("export_master")
 
 sys.path.insert(0, str(Path(__file__).parent))
 from analytics.sql_data_loader import load_all, build_fact
+from analytics.t3_loader import load_t3
 
 OUT = Path(__file__).parent / "output" / "master"
 OUT.mkdir(parents=True, exist_ok=True)
@@ -54,20 +55,25 @@ log.info("0. Loading fact table from SQL...")
 dfs  = load_all()
 fact = build_fact(dfs)
 fact["order_date"]   = pd.to_datetime(fact["order_date"])
-fact["ym"]           = fact["order_date"].dt.to_period("M").astype(str)
-# Giữ product_code là string để tránh mất leading zeros khi đọc lại CSV
 fact["product_code"] = fact["product_code"].astype(str)
-# group_code NULL: sản phẩm không map được line_id trong nguồn SQL (72 SKU)
+
+log.info("0b. Loading T3/2026 from emails + PDFs...")
+t3 = load_t3(dfs)
+if not t3.empty:
+    fact = pd.concat([fact, t3], ignore_index=True)
+    log.info(f"   Ghép T3: tổng {len(fact):,} rows")
+
+fact["ym"] = fact["order_date"].dt.to_period("M").astype(str)
 n_null_grp = fact["group_code"].isna().sum()
 if n_null_grp:
-    log.warning(f"   {n_null_grp} rows có group_code=NULL (72 SKU không có line_id trong SQL)")
+    log.warning(f"   {n_null_grp} rows có group_code=NULL")
 
 DATA_START = fact["order_date"].min()
 DATA_END   = fact["order_date"].max()
 log.info(f"   {len(fact):,} rows | {DATA_START.date()} → {DATA_END.date()}")
 
 FEAT_END  = pd.Timestamp("2025-03-31")   # cutoff features churn
-TRAIN_END = pd.Timestamp("2026-01-31")   # cutoff train forecast
+TRAIN_END = pd.Timestamp("2026-02-28")   # cutoff train forecast (test = T3/2026)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -249,7 +255,7 @@ log.info("3. Running Prophet forecast...")
 forecast_rows = []
 try:
     from prophet import Prophet
-    TEST_START = pd.Timestamp("2026-02-01")
+    TEST_START = pd.Timestamp("2026-03-01")
     FCST_END   = pd.Timestamp("2026-06-30")
 
     for gc in sorted(fact["group_code"].dropna().unique()):
