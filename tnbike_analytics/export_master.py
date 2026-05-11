@@ -23,6 +23,7 @@ Train / Test split:
   Forecast: train 2025-01→2026-01 | test 2026-02 | forecast 2026-03→06
 """
 
+import csv
 import sys, warnings, logging
 import numpy as np
 import pandas as pd
@@ -348,7 +349,8 @@ f["line_total"]   = f["line_total"].astype(int)
 f["order_total"]  = f["order_total"].astype(int)
 f["unit_price"]   = f["unit_price"].round(2)
 
-f.to_csv(OUT / "fact_full.csv", index=False, encoding="utf-8-sig")
+f.to_csv(OUT / "fact_full.csv", index=False, encoding="utf-8-sig",
+         quoting=csv.QUOTE_NONNUMERIC)
 log.info(f"   → {len(f):,} rows × {len(f.columns)} cols")
 
 
@@ -526,7 +528,8 @@ for c in ["revenue","quantity","n_orders","n_customers",
 cols = ["grain"] + [c for c in agg_master.columns if c != "grain"]
 agg_master = agg_master[cols]
 
-agg_master.to_csv(OUT / "agg_master.csv", index=False, encoding="utf-8-sig")
+agg_master.to_csv(OUT / "agg_master.csv", index=False, encoding="utf-8-sig",
+                  quoting=csv.QUOTE_NONNUMERIC)
 log.info(f"   → {len(agg_master):,} rows × {len(agg_master.columns)} cols")
 
 
