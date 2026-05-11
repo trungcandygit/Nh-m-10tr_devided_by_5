@@ -77,13 +77,18 @@ Tất cả aggregations trong 1 file — dùng cột `grain` để lọc:
 | `province_total` | Tổng theo tỉnh | Map, bar chart tỉnh |
 | `region_group` | Vùng × nhóm SP | Stacked bar |
 | `region_total` | Tổng theo vùng | Pie/donut |
+| `national_group` | Quốc gia × nhóm SP | Summary bar |
+| `national_total` | Tổng toàn quốc | Single KPI |
 | `sku` | Từng SKU (161 sản phẩm) | BCG bubble, Pareto, top SKU |
 | `customer` | Từng khách hàng (333) | Churn table, RFM scatter |
 | `forecast_daily` | Dự báo daily × nhóm SP | Forecast band chart |
 
 ```python
 # Ví dụ dùng trong Dash
-df = pd.read_csv("output/master/agg_master.csv")
+# QUAN TRỌNG: product_code phải đọc là string để giữ leading zeros
+STR_COLS = {"product_code": str}
+df   = pd.read_csv("output/master/agg_master.csv",  dtype=STR_COLS)
+fact = pd.read_csv("output/master/fact_full.csv",   dtype=STR_COLS)
 
 monthly  = df[df.grain == "monthly_group_region"]
 province = df[df.grain == "province_total"]
