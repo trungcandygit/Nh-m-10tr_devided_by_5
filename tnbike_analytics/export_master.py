@@ -19,10 +19,11 @@ Output → output/master/
 
 Train / Test split:
   Churn   : features Q1-2025 | label = mua lại Q1-2026 | 80/20 stratified
-            Pipeline(StandardScaler + GBM) — zero data leakage
+            Pipeline(StandardScaler + LogisticRegression) — zero data leakage
   Forecast: train 2025-01→2026-01 | test 2026-02 | forecast 2026-03→06
 """
 
+import csv
 import sys, warnings, logging
 import numpy as np
 import pandas as pd
@@ -34,6 +35,7 @@ log = logging.getLogger("export_master")
 
 sys.path.insert(0, str(Path(__file__).parent))
 from analytics.sql_data_loader import load_all, build_fact
+from analytics.t3_loader import load_t3
 
 OUT = Path(__file__).parent / "output" / "master"
 OUT.mkdir(parents=True, exist_ok=True)
@@ -53,20 +55,25 @@ log.info("0. Loading fact table from SQL...")
 dfs  = load_all()
 fact = build_fact(dfs)
 fact["order_date"]   = pd.to_datetime(fact["order_date"])
-fact["ym"]           = fact["order_date"].dt.to_period("M").astype(str)
-# Giữ product_code là string để tránh mất leading zeros khi đọc lại CSV
 fact["product_code"] = fact["product_code"].astype(str)
-# group_code NULL: sản phẩm không map được line_id trong nguồn SQL (72 SKU)
+
+log.info("0b. Loading T3/2026 from emails + PDFs...")
+t3 = load_t3(dfs)
+if not t3.empty:
+    fact = pd.concat([fact, t3], ignore_index=True)
+    log.info(f"   Ghép T3: tổng {len(fact):,} rows")
+
+fact["ym"] = fact["order_date"].dt.to_period("M").astype(str)
 n_null_grp = fact["group_code"].isna().sum()
 if n_null_grp:
-    log.warning(f"   {n_null_grp} rows có group_code=NULL (72 SKU không có line_id trong SQL)")
+    log.warning(f"   {n_null_grp} rows có group_code=NULL")
 
 DATA_START = fact["order_date"].min()
 DATA_END   = fact["order_date"].max()
 log.info(f"   {len(fact):,} rows | {DATA_START.date()} → {DATA_END.date()}")
 
 FEAT_END  = pd.Timestamp("2025-03-31")   # cutoff features churn
-TRAIN_END = pd.Timestamp("2026-01-31")   # cutoff train forecast
+TRAIN_END = pd.Timestamp("2026-02-28")   # cutoff train forecast (test = T3/2026)
 
 
 # ════════════════════════════════════════════════════════════════
@@ -137,7 +144,7 @@ log.info("2. Computing customer RFM + Churn ML...")
 
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedShuffleSplit, cross_val_score
 from sklearn.metrics import roc_auc_score, classification_report
 
@@ -210,15 +217,18 @@ sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
 tr_idx, te_idx = next(sss.split(X, y))
 
 pipe = Pipeline([("sc", StandardScaler()),
-                 ("cl", GradientBoostingClassifier(n_estimators=200, learning_rate=0.05,
-                                                    max_depth=3, random_state=42))])
+                 ("cl", LogisticRegression(C=1.0, max_iter=1000, random_state=42))])
 cv = cross_val_score(pipe, X[tr_idx], y[tr_idx], cv=5, scoring="roc_auc")
 log.info(f"   CV ROC-AUC (train-only): {cv.mean():.3f} ± {cv.std():.3f}")
 
 pipe.fit(X[tr_idx], y[tr_idx])
+prob_tr = pipe.predict_proba(X[tr_idx])[:,1]
+roc_tr  = roc_auc_score(y[tr_idx], prob_tr)
 prob_te = pipe.predict_proba(X[te_idx])[:,1]
 roc_te  = roc_auc_score(y[te_idx], prob_te)
-log.info(f"   ROC-AUC (held-out test): {roc_te:.3f}")
+log.info(f"   ROC-AUC train (overfit check): {roc_tr:.3f}")
+log.info(f"   ROC-AUC held-out test:         {roc_te:.3f}")
+log.info(f"   Overfit gap (train-test):      {roc_tr - roc_te:+.3f}")
 log.info(f"\n{classification_report(y[te_idx],(prob_te>=.5).astype(int),zero_division=0)}")
 
 cdf["churn_prob"]     = pipe.predict_proba(X)[:,1].round(4)
@@ -245,7 +255,7 @@ log.info("3. Running Prophet forecast...")
 forecast_rows = []
 try:
     from prophet import Prophet
-    TEST_START = pd.Timestamp("2026-02-01")
+    TEST_START = pd.Timestamp("2026-03-01")
     FCST_END   = pd.Timestamp("2026-06-30")
 
     for gc in sorted(fact["group_code"].dropna().unique()):
@@ -348,7 +358,8 @@ f["line_total"]   = f["line_total"].astype(int)
 f["order_total"]  = f["order_total"].astype(int)
 f["unit_price"]   = f["unit_price"].round(2)
 
-f.to_csv(OUT / "fact_full.csv", index=False, encoding="utf-8-sig")
+f.to_csv(OUT / "fact_full.csv", index=False, encoding="utf-8-sig",
+         quoting=csv.QUOTE_NONNUMERIC)
 log.info(f"   → {len(f):,} rows × {len(f.columns)} cols")
 
 
@@ -526,7 +537,8 @@ for c in ["revenue","quantity","n_orders","n_customers",
 cols = ["grain"] + [c for c in agg_master.columns if c != "grain"]
 agg_master = agg_master[cols]
 
-agg_master.to_csv(OUT / "agg_master.csv", index=False, encoding="utf-8-sig")
+agg_master.to_csv(OUT / "agg_master.csv", index=False, encoding="utf-8-sig",
+                  quoting=csv.QUOTE_NONNUMERIC)
 log.info(f"   → {len(agg_master):,} rows × {len(agg_master.columns)} cols")
 
 
