@@ -118,7 +118,7 @@ INFO  0. Loading fact table from SQL...
 INFO     17,031 rows | 2025-01-02 → 2026-02-28
 INFO  1. Computing SKU enrichment...
 INFO  2. Computing customer RFM + Churn ML...
-INFO     ROC-AUC (held-out test): 0.805
+INFO     ROC-AUC (held-out test): 0.841
 INFO  3. Running Prophet forecast...
 INFO  4. Building fact_full.csv...   → 17,031 rows × 48 cols
 INFO  5. Building agg_master.csv...  →  2,097 rows × 70 cols
@@ -152,9 +152,9 @@ python -m pipeline.run_pipeline \
 ### Churn Prediction (customer grain)
 - **Feature period:** Q1-2025 (Jan–Mar 2025)
 - **Label:** khách hàng không mua lại trong Q1-2026 → churn = 1
-- **Model:** `Pipeline(StandardScaler + GradientBoosting)` — không data leakage
+- **Model:** `Pipeline(StandardScaler + LogisticRegression)` — không data leakage
 - **Split:** 80/20 StratifiedShuffleSplit
-- **ROC-AUC held-out test: 0.805**
+- **ROC-AUC held-out test: 0.841**
 
 ### Demand Forecast (forecast_daily grain)
 - **Train:** 2025-01 → 2026-01
