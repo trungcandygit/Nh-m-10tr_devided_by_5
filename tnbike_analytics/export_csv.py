@@ -202,65 +202,13 @@ color_hist.drop(columns=["_tot"], inplace=True)
 color_hist.to_csv(OUT_DATA / "color_history.csv", **QW)
 log.info(f"  color_history.csv          {len(color_hist):>4} rows")
 
-# ── dealer_rfm.csv (RFM features & segments, không có churn output) ──
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.metrics import roc_auc_score
+# ── dealer_rfm.csv — lấy từ prediction_engine (RFM only, không churn) ──
+from analytics.prediction_engine import run_q1_forecast, run_q2_color_demand, run_q3_dealer_forecast
 
-q1_2025 = fact[fact.order_date <= FEAT_END]
-active_2026 = set(fact[fact.order_date >= "2026-01-01"]["customer_code"].unique())
-cust_meta = (fact[["customer_code","customer_name","province_name","region"]]
-             .drop_duplicates("customer_code").set_index("customer_code"))
+log.info("  Đang tính dealer RFM (dùng cho data/)...")
+q3_out = run_q3_dealer_forecast(fact)
+dealer_act = q3_out["dealer_activity"]
 
-feats = []
-for cc, g in q1_2025.groupby("customer_code"):
-    g = g.sort_values("order_date")
-    last = g["order_date"].max()
-    monthly_rev = g.groupby(g["order_date"].dt.to_period("M"))["line_total"].sum()
-    slope = 0.0
-    if len(monthly_rev) >= 2:
-        slope = float(np.polyfit(np.arange(len(monthly_rev)), monthly_rev.values, 1)[0])
-    m = cust_meta.loc[cc] if cc in cust_meta.index else {}
-    q_orders = fact[(fact.customer_code==cc) & (fact.order_date >= "2026-01-01")]["so_number"].nunique()
-    feats.append({
-        "customer_code":     cc,
-        "customer_name":     m.get("customer_name",""),
-        "province_name":     m.get("province_name",""),
-        "region":            m.get("region",""),
-        "cohort_month":      g["order_date"].min().strftime("%Y-%m"),
-        "first_order_date":  g["order_date"].min().date(),
-        "last_order_q1_2025":last.date(),
-        "recency_days":      (FEAT_END - last).days,
-        "n_orders_q1_2025":  g["so_number"].nunique(),
-        "revenue_q1_2025":   int(g["line_total"].sum()),
-        "avg_order_value":   round(g.groupby("so_number")["line_total"].sum().mean(),0),
-        "n_product_groups":  g["group_code"].nunique(),
-        "trend_slope":       round(slope,2),
-        "groups_bought":     "|".join(sorted(g["group_code"].dropna().unique())),
-        "n_orders_q1_2026":  q_orders,
-        "revenue_q1_2026":   int(fact[(fact.customer_code==cc)&(fact.order_date>="2026-01-01")]["line_total"].sum()),
-    })
-
-cdf = pd.DataFrame(feats)
-cdf["churn_label"] = (~cdf["customer_code"].isin(active_2026)).astype(int)
-
-for col, sc, asc in [("recency_days","rfm_r",True),("n_orders_q1_2025","rfm_f",False),("revenue_q1_2025","rfm_m",False)]:
-    rk = cdf[col].rank(pct=True, method="average")
-    bins, labels = [0,.2,.4,.6,.8,1.0], ([5,4,3,2,1] if asc else [1,2,3,4,5])
-    cdf[sc] = pd.cut(rk, bins=bins, labels=labels, include_lowest=True).astype(int)
-
-def rfm_seg(r,f,m):
-    if r>=4 and f>=4 and m>=4: return "Khách hàng tiêu biểu"
-    if r>=4 and f>=3:           return "Khách hàng trung thành"
-    if r>=4:                    return "Khách hàng mới tiềm năng"
-    if r<=2 and f>=4:           return "Cần chăm sóc đặc biệt"
-    if r<=2:                    return "Có nguy cơ rời bỏ"
-    return "Cần theo dõi"
-cdf["rfm_segment"] = cdf.apply(lambda r: rfm_seg(r.rfm_r, r.rfm_f, r.rfm_m), axis=1)
-
-# dealer_rfm.csv → chỉ features thực tế + RFM (không có churn prediction)
 rfm_cols = [
     "customer_code","customer_name","province_name","region",
     "cohort_month","first_order_date","last_order_q1_2025",
@@ -269,8 +217,10 @@ rfm_cols = [
     "n_orders_q1_2026","revenue_q1_2026","churn_label",
     "rfm_r","rfm_f","rfm_m","rfm_segment",
 ]
-cdf[rfm_cols].to_csv(OUT_DATA / "dealer_rfm.csv", **QW)
-log.info(f"  dealer_rfm.csv             {len(cdf):>4} rows")
+# Chỉ lưu các cột tồn tại trong dealer_act
+rfm_save = [c for c in rfm_cols if c in dealer_act.columns]
+dealer_act[rfm_save].to_csv(OUT_DATA / "dealer_rfm.csv", **QW)
+log.info(f"  dealer_rfm.csv             {len(dealer_act):>4} rows")
 
 # ── geo_province.csv & geo_region.csv ───────────────
 nat_rev_total = int(fact["line_total"].sum())
@@ -317,187 +267,60 @@ log.info(f"  ops_pipeline.csv              {len(ops):>2} rows")
 log.info(f"  ops_daily.csv                 {len(t3_by_day):>2} rows")
 
 # ════════════════════════════════════════════════════
-# PREDICTION/ — ML & Prophet output
+# PREDICTION/ — Q1 + Q2 + Q3 qua prediction_engine
 # ════════════════════════════════════════════════════
 log.info("=== PREDICTION/ ===")
 
-# ── dealer_churn.csv (LogReg churn model output) ────
-X_cols = ["recency_days","n_orders_q1_2025","revenue_q1_2025","avg_order_value","n_product_groups","trend_slope"]
-X = cdf[X_cols].fillna(0).values
-y = cdf["churn_label"].values
-sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-tr_idx, te_idx = next(sss.split(X, y))
-pipe = Pipeline([("sc",StandardScaler()),("cl",LogisticRegression(C=1.0,max_iter=1000,random_state=42))])
-pipe.fit(X[tr_idx], y[tr_idx])
-cdf["churn_prob"]     = pipe.predict_proba(X)[:,1].round(4)
-cdf["churn_split"]    = "train"
-cdf.loc[cdf.index[te_idx], "churn_split"] = "test"
-cdf["churn_priority"] = pd.cut(cdf["churn_prob"], bins=[0,.3,.6,1.0],
-                                labels=["Thấp","Trung bình","Cao"], include_lowest=True)
-roc_te = roc_auc_score(y[te_idx], pipe.predict_proba(X[te_idx])[:,1])
-cdf["roc_auc_test"] = round(roc_te, 4)
-log.info(f"   Churn model ROC-AUC test: {roc_te:.3f}")
+# ── Q1: Prophet forecast ─────────────────────────────
+log.info("  [Q1] Chạy Prophet forecast...")
+q1_out = run_q1_forecast(fact)
 
-churn_cols = ["customer_code","churn_label","churn_prob","churn_priority","churn_split","roc_auc_test"]
-cdf[churn_cols].to_csv(OUT_PRED / "dealer_churn.csv", **QW)
-log.info(f"  dealer_churn.csv           {len(cdf):>4} rows")
+q1_out["daily"].to_csv(OUT_PRED / "revenue_q2_daily.csv", **QW)
+log.info(f"  revenue_q2_daily.csv     {len(q1_out['daily']):>6,} rows")
 
-# ── revenue_q2_daily.csv & revenue_q2_monthly.csv ───
-forecast_rows = []
-try:
-    from prophet import Prophet
-    TRAIN_END = pd.Timestamp("2026-03-31")
-    FCST_END  = pd.Timestamp("2026-06-30")
+q1_out["monthly"].to_csv(OUT_PRED / "revenue_q2_monthly.csv", **QW)
+log.info(f"  revenue_q2_monthly.csv      {len(q1_out['monthly']):>4} rows")
 
-    for gc in sorted(fact["group_code"].dropna().unique()):
-        daily = (fact[fact.group_code==gc].groupby("order_date")["line_total"].sum()
-                 .reset_index().rename(columns={"order_date":"ds","line_total":"y"}))
-        daily["ds"] = pd.to_datetime(daily["ds"])
-        train = daily[daily.ds <= TRAIN_END].copy()
-        if len(train) < 10: continue
-        cap = float(train["y"].max() * 2.5)
-        train["cap"] = cap; train["floor"] = 0.0
-        m = Prophet(growth="logistic", weekly_seasonality=True, daily_seasonality=False,
-                    yearly_seasonality=False, seasonality_mode="multiplicative",
-                    changepoint_prior_scale=0.10)
-        m.add_country_holidays(country_name="VN")
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            m.fit(train)
-        n_days = (FCST_END - train["ds"].max()).days
-        fut = m.make_future_dataframe(periods=n_days)
-        fut["cap"] = cap; fut["floor"] = 0.0
-        fc = m.predict(fut)
-        for col in ["yhat","yhat_lower","yhat_upper"]:
-            fc[col] = fc[col].clip(lower=0)
-        fc = fc[["ds","yhat","yhat_lower","yhat_upper"]].merge(
-            daily.rename(columns={"y":"y_actual"}), on="ds", how="left")
-        fc["y_actual"] = fc["y_actual"].fillna(0).astype(int)
-        fc["split"] = "train"
-        fc.loc[fc.ds > TRAIN_END, "split"] = "forecast"
-        fc["group_code"]   = gc
-        fc["fiscal_month"] = fc["ds"].dt.month
-        fc["fiscal_year"]  = fc["ds"].dt.year
-        fc = fc[fc.ds > pd.Timestamp("2025-01-01")]
-        forecast_rows.append(fc)
-    log.info(f"   Prophet: {len(forecast_rows)} groups")
-except ImportError:
-    log.warning("   Prophet chưa cài — bỏ qua")
+q1_out["weekly"].to_csv(OUT_PRED / "revenue_q2_weekly.csv", **QW)
+log.info(f"  revenue_q2_weekly.csv       {len(q1_out['weekly']):>4} rows")
 
-if forecast_rows:
-    fcst = pd.concat(forecast_rows, ignore_index=True)
-    fcst_monthly = (fcst.groupby(["fiscal_year","fiscal_month","group_code","split"])
-                    .agg(yhat=("yhat","sum"), yhat_lower=("yhat_lower","sum"),
-                         yhat_upper=("yhat_upper","sum"), y_actual=("y_actual","sum"))
-                    .reset_index())
-    fcst_monthly["ym"] = fcst_monthly.apply(lambda r: f"{int(r.fiscal_year)}-{int(r.fiscal_month):02d}", axis=1)
+q1_out["sku_q2"].to_csv(OUT_PRED / "sku_q2_forecast.csv", **QW)
+top20 = q1_out["sku_q2"]["top20_flag"].sum() if "top20_flag" in q1_out["sku_q2"].columns else "?"
+log.info(f"  sku_q2_forecast.csv        {len(q1_out['sku_q2']):>4} rows  (top20: {top20})")
 
-    # ── revenue_q2_weekly.csv ────────────────────────
-    fcst_w = fcst.copy()
-    fcst_w["ds"] = pd.to_datetime(fcst_w["ds"])
-    fcst_w["week_start"] = fcst_w["ds"].dt.to_period("W").apply(lambda p: p.start_time)
-    fcst_w["yw"] = fcst_w["ds"].dt.strftime("%G-W%V")  # ISO week
-    fcst_q2_w = fcst_w[fcst_w["fiscal_year"].isin([2026]) & fcst_w["fiscal_month"].isin([4,5,6])]
-    fcst_weekly = (fcst_q2_w.groupby(["yw","week_start","group_code","split"])
-                   .agg(yhat=("yhat","sum"), yhat_lower=("yhat_lower","sum"),
-                        yhat_upper=("yhat_upper","sum"), y_actual=("y_actual","sum"))
-                   .reset_index())
-    fcst_weekly["week_start"] = fcst_weekly["week_start"].astype(str)
-    fcst_weekly.to_csv(OUT_PRED / "revenue_q2_weekly.csv", **QW)
-    log.info(f"  revenue_q2_weekly.csv       {len(fcst_weekly):>4} rows")
+# ── Q2: Color demand + K-Means slow-mover ────────────
+log.info("  [Q2] Chạy color demand + K-Means...")
+q2_out = run_q2_color_demand(fact, q1_out["monthly"])
 
-    # ── sku_q2_forecast.csv — top 20 SKU dự báo ─────
-    # Phân bổ group yhat xuống SKU theo tỷ trọng DT Q1-2026 trong nhóm
-    sku_share = (fact[fact.fiscal_year==2026]
-                 .groupby(["group_code","product_code","product_name","color","line_name"])["line_total"]
-                 .sum().reset_index().rename(columns={"line_total":"rev_q1_2026"}))
-    grp_q1 = sku_share.groupby("group_code")["rev_q1_2026"].sum().rename("grp_total")
-    sku_share = sku_share.merge(grp_q1, on="group_code", how="left")
-    sku_share["sku_share_in_group"] = (sku_share["rev_q1_2026"] / sku_share["grp_total"].replace(0, np.nan)).fillna(0)
+q2_out["color_history"].to_csv(OUT_DATA / "color_history.csv", **QW)
+log.info(f"  color_history.csv (update)  {len(q2_out['color_history']):>4} rows")
 
-    fcst_q2_grp = fcst_monthly[(fcst_monthly.fiscal_year==2026) & (fcst_monthly.fiscal_month.isin([4,5,6]))].copy()
-    sku_q2 = sku_share.merge(
-        fcst_q2_grp[["group_code","fiscal_month","yhat","yhat_lower","yhat_upper"]],
-        on="group_code", how="inner")
-    sku_q2["predicted_revenue"]       = (sku_q2["sku_share_in_group"] * sku_q2["yhat"]).round(0)
-    sku_q2["predicted_revenue_lower"] = (sku_q2["sku_share_in_group"] * sku_q2["yhat_lower"]).round(0)
-    sku_q2["predicted_revenue_upper"] = (sku_q2["sku_share_in_group"] * sku_q2["yhat_upper"]).round(0)
-    sku_q2.drop(columns=["yhat","yhat_lower","yhat_upper","grp_total"], inplace=True)
+q2_out["color_q2"].to_csv(OUT_PRED / "color_q2.csv", **QW)
+log.info(f"  color_q2.csv               {len(q2_out['color_q2']):>4} rows")
 
-    # Tổng Q2 per SKU để rank top 20
-    sku_q2_total = (sku_q2.groupby(["product_code","product_name","color","line_name","group_code"])
-                   ["predicted_revenue"].sum().reset_index()
-                   .sort_values("predicted_revenue", ascending=False).reset_index(drop=True))
-    sku_q2_total["q2_rank"] = sku_q2_total.index + 1
-    sku_q2_total["top20_flag"] = (sku_q2_total["q2_rank"] <= 20).astype(int)
+q2_out["sku_cluster"].to_csv(OUT_PRED / "sku_cluster.csv", **QW)
+slow = (q2_out["sku_cluster"]["slow_mover_risk"] == "Nguy cơ cao").sum()
+log.info(f"  sku_cluster.csv            {len(q2_out['sku_cluster']):>4} rows  (slow-mover: {slow})")
 
-    # Merge rank back
-    sku_q2 = sku_q2.merge(sku_q2_total[["product_code","q2_rank","top20_flag"]], on="product_code", how="left")
-    sku_q2["ym"] = sku_q2.apply(lambda r: f"2026-{int(r.fiscal_month):02d}", axis=1)
+# ── Q3: BG-NBD + LightGBM + SHAP ────────────────────
+# (q3_out đã chạy ở trên khi build dealer_rfm.csv)
+q3_out["dealer_churn"].to_csv(OUT_PRED / "dealer_churn.csv", **QW)
+log.info(f"  dealer_churn.csv           {len(q3_out['dealer_churn']):>4} rows")
 
-    sku_q2.to_csv(OUT_PRED / "sku_q2_forecast.csv", **QW)
-    log.info(f"  sku_q2_forecast.csv        {len(sku_q2):>4} rows  (top20: {sku_q2_total['top20_flag'].sum()})")
+# dealer_activity: lưu các cột cần thiết
+act_cols = [
+    "customer_code","customer_name","province_name","region",
+    "last_order_date","recency_days","n_orders_total","revenue_total",
+    "avg_order_value","n_product_groups","trend_slope","active_in_t3",
+    "prob_purchase_30d","expected_orders_30d","activity_risk","priority_contact",
+    "trend_score","marketing_priority","marketing_priority_label",
+]
+act_save = [c for c in act_cols if c in dealer_act.columns]
+dealer_act[act_save].to_csv(OUT_PRED / "dealer_activity.csv", **QW)
+log.info(f"  dealer_activity.csv        {len(dealer_act):>4} rows")
 
-    fcst["ds"] = fcst["ds"].astype(str)
-    fcst.to_csv(OUT_PRED / "revenue_q2_daily.csv", **QW)
-    fcst_monthly.to_csv(OUT_PRED / "revenue_q2_monthly.csv", **QW)
-    log.info(f"  revenue_q2_daily.csv     {len(fcst):>6,} rows")
-    log.info(f"  revenue_q2_monthly.csv      {len(fcst_monthly):>4} rows")
-
-# ── color_q2.csv (dự báo tỷ trọng màu Q2) ──────────
-q1_2026_color_share = (
-    color_hist[color_hist.fiscal_year==2026]
-    .groupby(["color","group_code"])["color_share_pct"].mean().reset_index()
-    .rename(columns={"color_share_pct":"avg_share_q1_2026_pct"}))
-
-if forecast_rows:
-    fcst_q2 = fcst_monthly[(fcst_monthly.fiscal_year==2026)&(fcst_monthly.fiscal_month.isin([4,5,6]))].copy()
-    color_forecast = q1_2026_color_share.merge(
-        fcst_q2[["fiscal_month","group_code","yhat","split"]].rename(columns={"yhat":"group_yhat"}),
-        on="group_code", how="left")
-    color_forecast["predicted_revenue"] = (color_forecast["avg_share_q1_2026_pct"]/100 * color_forecast["group_yhat"]).round(0)
-    color_forecast.to_csv(OUT_PRED / "color_q2.csv", **QW)
-    log.info(f"  color_q2.csv               {len(color_forecast):>4} rows")
-
-# ── dealer_activity.csv (xác suất đặt hàng 30 ngày) ─
-REF_DATE = pd.Timestamp("2026-03-31")
-all_dealers = fact[["customer_code","customer_name","province_name","region"]].drop_duplicates("customer_code")
-dealer_stats = []
-for cc, g in fact.groupby("customer_code"):
-    g = g.sort_values("order_date")
-    last = g["order_date"].max()
-    monthly_rev = g.groupby(g["order_date"].dt.to_period("M"))["line_total"].sum()
-    slope = 0.0
-    if len(monthly_rev) >= 2:
-        slope = float(np.polyfit(np.arange(len(monthly_rev)), monthly_rev.values, 1)[0])
-    dealer_stats.append({
-        "customer_code":    cc,
-        "last_order_date":  last.date(),
-        "recency_days":     (REF_DATE - last).days,
-        "n_orders_total":   g["so_number"].nunique(),
-        "revenue_total":    int(g["line_total"].sum()),
-        "avg_order_value":  round(g.groupby("so_number")["line_total"].sum().mean(),0),
-        "n_product_groups": g["group_code"].nunique(),
-        "trend_slope":      round(slope,2),
-        "active_in_t3":     int((g["order_date"] >= "2026-03-01").any()),
-    })
-
-dealer_df = pd.DataFrame(dealer_stats)
-dealer_df = dealer_df.merge(all_dealers, on="customer_code", how="left")
-dealer_df["n_orders_q1_2025"] = dealer_df["n_orders_total"]
-dealer_df["revenue_q1_2025"]  = dealer_df["revenue_total"]
-
-X_dealer = dealer_df[X_cols].fillna(0).values
-dealer_df["prob_active_30d"] = (1 - pipe.predict_proba(X_dealer)[:,1]).round(4)
-dealer_df["activity_risk"]   = pd.cut(dealer_df["prob_active_30d"],
-                                       bins=[0,.3,.6,1.0],
-                                       labels=["Nguy cơ cao","Trung bình","Tích cực"],
-                                       include_lowest=True)
-dealer_df["priority_contact"] = (dealer_df["prob_active_30d"] < 0.3).astype(int)
-dealer_df.drop(columns=["n_orders_q1_2025","revenue_q1_2025"], inplace=True)
-
-dealer_df.to_csv(OUT_PRED / "dealer_activity.csv", **QW)
-log.info(f"  dealer_activity.csv        {len(dealer_df):>4} rows")
+q3_out["shap_importance"].to_csv(OUT_PRED / "shap_importance.csv", **QW)
+log.info(f"  shap_importance.csv          {len(q3_out['shap_importance']):>2} rows")
 
 # ════════════════════════════════════════════════════
 # SUMMARY

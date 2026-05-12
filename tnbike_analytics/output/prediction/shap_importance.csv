@@ -1,0 +1,10 @@
+﻿"feature","shap_mean_abs","rank"
+"n_orders_total",1.6069,1
+"active_in_t3",1.4367,2
+"n_orders_q1_2025",0.707,3
+"revenue_total",0.3968,4
+"avg_order_value",0.3421,5
+"recency_days",0.1342,6
+"n_product_groups",0.0788,7
+"revenue_q1_2025",0.072,8
+"trend_slope",0.0469,9
