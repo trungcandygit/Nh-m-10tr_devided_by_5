@@ -60,7 +60,7 @@ fact_hist["ym"]           = fact_hist["order_date"].dt.to_period("M").astype(str
 
 t3 = load_t3(dfs)
 
-fact = pd.concat([fact_hist, t3], ignore_index=True)
+fact = pd.concat([fact_hist, t3], ignore_index=True) if not t3.empty else fact_hist.copy()
 fact["order_date"]   = pd.to_datetime(fact["order_date"])
 fact["product_code"] = fact["product_code"].astype(str)
 fact["ym"]           = fact["order_date"].dt.to_period("M").astype(str)
@@ -83,14 +83,16 @@ raw_hist.to_csv(OUT_DATA / "raw_history.csv", **QW)
 log.info(f"  raw_history.csv          {len(raw_hist):>7,} rows")
 
 # ── raw_t3_orders.csv ───────────────────────────────
-raw_t3 = t3[[
-    "so_number","order_date","fiscal_year","fiscal_month","fiscal_quarter",
-    "customer_code","customer_name","province_name","region",
-    "product_code","product_name","color","line_name","group_code","group_name",
-    "quantity","unit_price","line_total",
-]].copy()
+T3_COLS = ["so_number","order_date","fiscal_year","fiscal_month","fiscal_quarter",
+           "customer_code","customer_name","province_name","region",
+           "product_code","product_name","color","line_name","group_code","group_name",
+           "quantity","unit_price","line_total"]
+if t3.empty or not all(c in t3.columns for c in T3_COLS):
+    raw_t3 = pd.DataFrame(columns=T3_COLS)
+else:
+    raw_t3 = t3[T3_COLS].copy()
 raw_t3.to_csv(OUT_DATA / "raw_t3_orders.csv", **QW)
-log.info(f"  raw_t3_orders.csv        {len(raw_t3):>7,} rows  ({raw_t3['so_number'].nunique()} orders)")
+log.info(f"  raw_t3_orders.csv        {len(raw_t3):>7,} rows  ({raw_t3['so_number'].nunique() if not raw_t3.empty else 0} orders)")
 
 # ── kpi_overview.csv ──────────────────────────────────
 nat_rev  = int(fact["line_total"].sum())
@@ -253,7 +255,7 @@ ops = pd.DataFrame([
     {"metric":"don_loi_parse",        "value":1132-raw_t3["so_number"].nunique(),  "mo_ta":"Đơn lỗi/không parse được"},
     {"metric":"ty_le_thanh_cong_pct", "value":round(raw_t3["so_number"].nunique()/1132*100,1), "mo_ta":"Tỷ lệ thành công (%)"},
     {"metric":"tong_dong_sp",         "value":len(raw_t3),                         "mo_ta":"Tổng dòng sản phẩm T3"},
-    {"metric":"doanh_thu_t3",         "value":int(raw_t3["line_total"].sum()),      "mo_ta":"Doanh thu T3/2026 (VND)"},
+    {"metric":"doanh_thu_t3",         "value":int(raw_t3["line_total"].sum()) if not raw_t3.empty else 0, "mo_ta":"Doanh thu T3/2026 (VND)"},
     {"metric":"so_dai_ly_t3",         "value":raw_t3["customer_code"].nunique(),    "mo_ta":"Số đại lý đặt hàng T3"},
     {"metric":"phuong_an",            "value":"A",                                  "mo_ta":"Email + PDF (tối đa 25đ)"},
 ])
