@@ -38,8 +38,9 @@ def run_q1_forecast(fact: pd.DataFrame) -> dict:
     fact = fact.copy()
     fact["order_date"] = pd.to_datetime(fact["order_date"])
 
+    valid_groups = {"CITYBIKE_P", "KIDBIKE_1", "KIDBIKE_2", "SPORTBIKE_A", "SPORTBIKE_S"}
     all_rows = []
-    for gc in sorted(fact["group_code"].dropna().unique()):
+    for gc in sorted(g for g in fact["group_code"].dropna().unique() if g in valid_groups):
         daily = (fact[fact.group_code == gc]
                  .groupby("order_date")["line_total"].sum()
                  .reset_index().rename(columns={"order_date": "ds", "line_total": "y"}))
@@ -158,7 +159,9 @@ def run_q2_color_demand(fact: pd.DataFrame, fcst_monthly: pd.DataFrame) -> dict:
     from sklearn.cluster import KMeans
     from sklearn.preprocessing import StandardScaler
 
+    VALID_GROUPS = {"CITYBIKE_P", "KIDBIKE_1", "KIDBIKE_2", "SPORTBIKE_A", "SPORTBIKE_S"}
     fact = fact.copy()
+    fact = fact[fact["group_code"].isin(VALID_GROUPS)]
     fact["order_date"] = pd.to_datetime(fact["order_date"])
 
     # ── Lịch sử tỷ trọng màu ─────────────────────────
@@ -383,9 +386,9 @@ def run_q3_dealer_forecast(fact: pd.DataFrame) -> dict:
     cdf["rfm_segment"] = cdf.apply(lambda r: _rfm_seg(r.rfm_r, r.rfm_f, r.rfm_m), axis=1)
 
     # ── LightGBM churn (từ jamiubadmusng) ────────────
+    # active_in_t3, revenue_total, n_orders_total bị loại — dùng data 2026 → data leakage
     X_cols = ["recency_days","n_orders_q1_2025","revenue_q1_2025",
-              "avg_order_value","n_product_groups","trend_slope",
-              "revenue_total","n_orders_total","active_in_t3"]
+              "avg_order_value","n_product_groups","trend_slope"]
     X = cdf[X_cols].fillna(0).values
     y = cdf["churn_label"].values
 
