@@ -12,7 +12,7 @@ def _csv(subdir, name, **kw):
 
 def load_all():
     return {
-        # ── data/ — dữ liệu thực tế ──────────────────────
+        # ── data/ — dữ liệu thực tế ────────────────
         "kpi":           _csv("data", "kpi_overview.csv"),
         "monthly":       _csv("data", "monthly_trend.csv"),
         "sku":           _csv("data", "product_analysis.csv"),
@@ -23,12 +23,16 @@ def load_all():
         "region":        _csv("data", "geo_region.csv"),
         "ops_pipeline":  _csv("data", "ops_pipeline.csv"),
         "ops_daily":     _csv("data", "ops_daily.csv"),
-        # ── prediction/ — ML & Prophet output ────────────
-        "dealer_churn":   _csv("prediction", "dealer_churn.csv"),
-        "dealer_activity":_csv("prediction", "dealer_activity.csv"),
-        "fcst_daily":     _csv("prediction", "revenue_q2_daily.csv"),
-        "fcst_monthly":   _csv("prediction", "revenue_q2_monthly.csv"),
-        "color_fcst":     _csv("prediction", "color_q2.csv"),
+        # ── prediction/ — ML & Prophet output ────────
+        "dealer_churn":    _csv("prediction", "dealer_churn.csv"),
+        "dealer_activity": _csv("prediction", "dealer_activity.csv"),
+        "fcst_daily":      _csv("prediction", "revenue_q2_daily.csv"),
+        "fcst_monthly":    _csv("prediction", "revenue_q2_monthly.csv"),
+        "fcst_weekly":     _csv("prediction", "revenue_q2_weekly.csv"),
+        "sku_fcst":        _csv("prediction", "sku_q2_forecast.csv"),
+        "color_fcst":      _csv("prediction", "color_q2.csv"),
+        "sku_cluster":     _csv("prediction", "sku_cluster.csv"),
+        "shap":            _csv("prediction", "shap_importance.csv"),
     }
 
 DATA = load_all()
