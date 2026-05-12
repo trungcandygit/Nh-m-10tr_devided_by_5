@@ -162,7 +162,7 @@ cd dashboard && python index.py  # http://localhost:8050
 | Q2: Màu + SKU bán chậm | K-Means k=4 + seasonal trend | `color_q2.csv`, `sku_cluster.csv` |
 | Q3: Hoạt động đại lý | BG-NBD + LightGBM + SHAP | `dealer_activity.csv`, `dealer_churn.csv` |
 
-**Data integrity**: Feature period = Q1-2025 (≤ 2025-03-31). Label = active trong 2026. Không data leakage. LightGBM ROC-AUC test = **0.843** (test `test_q3_no_leakage_auc_ceiling` bắt AUC ≥ 0.99).
+**Data integrity**: Feature period = Q1-2025 (≤ 2025-03-31). Label = active trong 2026. Không data leakage. `active_in_t3`, `revenue_total`, `n_orders_total` bị loại — dùng data 2026 → leakage vào label. LightGBM ROC-AUC test = **0.843** (test `test_q3_no_leakage_auc_ceiling` bắt AUC ≥ 0.99).
 
 ---
 
