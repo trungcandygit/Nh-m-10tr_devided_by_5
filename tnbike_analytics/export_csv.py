@@ -387,6 +387,53 @@ if forecast_rows:
                          yhat_upper=("yhat_upper","sum"), y_actual=("y_actual","sum"))
                     .reset_index())
     fcst_monthly["ym"] = fcst_monthly.apply(lambda r: f"{int(r.fiscal_year)}-{int(r.fiscal_month):02d}", axis=1)
+
+    # ── revenue_q2_weekly.csv ────────────────────────
+    fcst_w = fcst.copy()
+    fcst_w["ds"] = pd.to_datetime(fcst_w["ds"])
+    fcst_w["week_start"] = fcst_w["ds"].dt.to_period("W").apply(lambda p: p.start_time)
+    fcst_w["yw"] = fcst_w["ds"].dt.strftime("%G-W%V")  # ISO week
+    fcst_q2_w = fcst_w[fcst_w["fiscal_year"].isin([2026]) & fcst_w["fiscal_month"].isin([4,5,6])]
+    fcst_weekly = (fcst_q2_w.groupby(["yw","week_start","group_code","split"])
+                   .agg(yhat=("yhat","sum"), yhat_lower=("yhat_lower","sum"),
+                        yhat_upper=("yhat_upper","sum"), y_actual=("y_actual","sum"))
+                   .reset_index())
+    fcst_weekly["week_start"] = fcst_weekly["week_start"].astype(str)
+    fcst_weekly.to_csv(OUT_PRED / "revenue_q2_weekly.csv", **QW)
+    log.info(f"  revenue_q2_weekly.csv       {len(fcst_weekly):>4} rows")
+
+    # ── sku_q2_forecast.csv — top 20 SKU dự báo ─────
+    # Phân bổ group yhat xuống SKU theo tỷ trọng DT Q1-2026 trong nhóm
+    sku_share = (fact[fact.fiscal_year==2026]
+                 .groupby(["group_code","product_code","product_name","color","line_name"])["line_total"]
+                 .sum().reset_index().rename(columns={"line_total":"rev_q1_2026"}))
+    grp_q1 = sku_share.groupby("group_code")["rev_q1_2026"].sum().rename("grp_total")
+    sku_share = sku_share.merge(grp_q1, on="group_code", how="left")
+    sku_share["sku_share_in_group"] = (sku_share["rev_q1_2026"] / sku_share["grp_total"].replace(0, np.nan)).fillna(0)
+
+    fcst_q2_grp = fcst_monthly[(fcst_monthly.fiscal_year==2026) & (fcst_monthly.fiscal_month.isin([4,5,6]))].copy()
+    sku_q2 = sku_share.merge(
+        fcst_q2_grp[["group_code","fiscal_month","yhat","yhat_lower","yhat_upper"]],
+        on="group_code", how="inner")
+    sku_q2["predicted_revenue"]       = (sku_q2["sku_share_in_group"] * sku_q2["yhat"]).round(0)
+    sku_q2["predicted_revenue_lower"] = (sku_q2["sku_share_in_group"] * sku_q2["yhat_lower"]).round(0)
+    sku_q2["predicted_revenue_upper"] = (sku_q2["sku_share_in_group"] * sku_q2["yhat_upper"]).round(0)
+    sku_q2.drop(columns=["yhat","yhat_lower","yhat_upper","grp_total"], inplace=True)
+
+    # Tổng Q2 per SKU để rank top 20
+    sku_q2_total = (sku_q2.groupby(["product_code","product_name","color","line_name","group_code"])
+                   ["predicted_revenue"].sum().reset_index()
+                   .sort_values("predicted_revenue", ascending=False).reset_index(drop=True))
+    sku_q2_total["q2_rank"] = sku_q2_total.index + 1
+    sku_q2_total["top20_flag"] = (sku_q2_total["q2_rank"] <= 20).astype(int)
+
+    # Merge rank back
+    sku_q2 = sku_q2.merge(sku_q2_total[["product_code","q2_rank","top20_flag"]], on="product_code", how="left")
+    sku_q2["ym"] = sku_q2.apply(lambda r: f"2026-{int(r.fiscal_month):02d}", axis=1)
+
+    sku_q2.to_csv(OUT_PRED / "sku_q2_forecast.csv", **QW)
+    log.info(f"  sku_q2_forecast.csv        {len(sku_q2):>4} rows  (top20: {sku_q2_total['top20_flag'].sum()})")
+
     fcst["ds"] = fcst["ds"].astype(str)
     fcst.to_csv(OUT_PRED / "revenue_q2_daily.csv", **QW)
     fcst_monthly.to_csv(OUT_PRED / "revenue_q2_monthly.csv", **QW)
