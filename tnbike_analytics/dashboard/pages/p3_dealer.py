@@ -19,7 +19,10 @@ RFM_COLORS = {
 }
 
 def layout():
-    df = DATA["dealer"].copy()
+    df     = DATA["dealer"].copy()
+    churn  = DATA["dealer_churn"].copy()
+    # join churn prediction back onto dealer for tables that need both
+    df_full = df.merge(churn, on="customer_code", how="left")
 
     # ─── RFM Scatter (R vs M, colored by segment, size by freq)
     fig_rfm = px.scatter(
@@ -39,7 +42,7 @@ def layout():
     )
 
     # ─── Churn distribution
-    churn_bins = df.groupby("churn_priority").size().reset_index(name="count")
+    churn_bins = df_full.groupby("churn_priority").size().reset_index(name="count")
     churn_order = {"Thấp": 0, "Trung bình": 1, "Cao": 2}
     churn_bins["order"] = churn_bins["churn_priority"].map(churn_order)
     churn_bins = churn_bins.sort_values("order")
@@ -74,7 +77,7 @@ def layout():
     )
 
     # ─── High-risk churn table
-    high_risk = df[df["churn_prob"] >= 0.6].sort_values("churn_prob", ascending=False).head(20)
+    high_risk = df_full[df_full["churn_prob"] >= 0.6].sort_values("churn_prob", ascending=False).head(20)
     high_risk_tbl = high_risk[["customer_code","customer_name","province_name","region",
                                 "rfm_segment","churn_prob","n_orders_q1_2025","revenue_q1_2025"]].copy()
     high_risk_tbl["churn_prob"]        = high_risk_tbl["churn_prob"].map("{:.1%}".format)

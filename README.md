@@ -1,101 +1,147 @@
 # tnbike_analytics — DATA EXPLORERS 2026 Vòng 2
 
 Hệ thống phân tích dữ liệu kinh doanh **Công ty Xe đạp Thống Nhất**
-Phạm vi: Q1-2025 + Q1-2026 | 702 đại lý | 247 SKU | 5 nhóm sản phẩm
+Phạm vi: Q1-2025 + Q1-2026 + T3/2026 (email pipeline) | 703 đại lý | 265 SKU | 5 nhóm sản phẩm
 
 ---
 
 ## Cấu trúc dự án
 
 ```
-tnbike_analytics/
+Nh-m-10tr_devided_by_5/               # Repo root
 │
-├── export_master.py             # ENTRY POINT — SQL → 2 CSV dashboard
+├── .gitignore                         # Loại trừ de_thi/emails/ và de_thi/pdfs/
+├── README.md
 │
-├── analytics/
-│   └── sql_data_loader.py       # Parse sql/02_import_data.sql → DataFrames
-│                                # (không cần PostgreSQL)
+├── de_thi/                            # Đề thi + dữ liệu gốc
+│   ├── emails/                        # 1.132 file .eml (gitignored)
+│   ├── pdfs/                          # 1.132 file .pdf (gitignored)
+│   ├── tnbike_emails_mar2026.rar
+│   ├── tnbike_pdfs_mar2026.rar
+│   ├── 01_create_tables.sql
+│   ├── 02_import_data.sql
+│   └── DataExplorers2026 - Đề thi Vòng 2 (2).pdf
 │
-├── pipeline/                    # Hạng mục A — Xử lý email + PDF T3/2026
-│   ├── email_parser.py          # Parse .eml, trích metadata + PDF attachment
-│   ├── pdf_extractor.py         # Bóc nội dung PDF đặt hàng (pdftotext)
-│   ├── validator.py             # Kiểm tra hợp lệ trước khi ghi DB
-│   ├── db_connection.py         # PostgreSQL context manager
-│   ├── db_writer.py             # Ghi email_log → sales_order → order_line
-│   └── run_pipeline.py          # Entry point: xử lý 1.132 email T3/2026
-│
-├── sql/
-│   ├── 01_create_tables.sql     # Schema: 9 bảng + 4 views + triggers
-│   ├── 02_import_data.sql       # Data Q1-2025 + Q1-2026 (17.031 dòng)
-│   ├── 03_email_log.sql         # Bảng log pipeline A
-│   ├── 04_dim_date.sql          # Dimension ngày (mùa vụ VN)
-│   └── 05_views_extra.sql       # Views tổng hợp
-│
-├── tests/
-│   ├── test_analytics.py        # 21 tests — analytics core (không cần DB)
-│   ├── test_email_parser.py
-│   ├── test_pdf_extractor.py
-│   └── test_validator.py
-│
-├── data/
-│   ├── raw/emails/              # Đặt file .eml vào đây (gitignored)
-│   └── raw/pdfs/                # Đặt file .pdf vào đây (gitignored)
-│
-└── output/
-    └── master/                  # OUTPUT — 2 CSV dùng cho dashboard
-        ├── fact_full.csv        # 17.031 rows × 48 cols (6 MB)
-        └── agg_master.csv       #  2.097 rows × 70 cols (449 KB)
+└── tnbike_analytics/
+    │
+    ├── export_master.py               # Pipeline cũ — SQL → master/*.csv
+    ├── export_csv.py                  # ENTRY POINT MỚI → output/data/ + output/prediction/
+    │
+    ├── analytics/
+    │   ├── sql_data_loader.py         # Parse sql/02_import_data.sql → DataFrames
+    │   └── t3_loader.py               # Parse 1.132 email+PDF T3/2026 → DataFrame
+    │                                  # (pdftotext, không cần PostgreSQL)
+    │
+    ├── pipeline/                      # Hạng mục A — Xử lý email + PDF T3/2026
+    │   ├── email_parser.py
+    │   ├── pdf_extractor.py
+    │   ├── validator.py
+    │   ├── db_connection.py
+    │   ├── db_writer.py
+    │   └── run_pipeline.py
+    │
+    ├── dashboard/                     # Dash app 6 trang (port 8050)
+    │   ├── index.py                   # Entry point + routing
+    │   ├── app.py
+    │   ├── data_loader.py             # Load output/data/ + output/prediction/
+    │   ├── assets/style.css
+    │   ├── requirements.txt
+    │   └── pages/
+    │       ├── p1_overview.py         # KPI + xu hướng doanh thu
+    │       ├── p2_product.py          # Pareto, BCG, màu sắc
+    │       ├── p3_dealer.py           # RFM + Churn
+    │       ├── p4_geo.py              # Tỉnh thành, vùng
+    │       ├── p5_forecast.py         # Prophet Q2 + dealer activity
+    │       └── p6_ops.py              # Vận hành pipeline email
+    │
+    ├── sql/
+    │   ├── 01_create_tables.sql
+    │   ├── 02_import_data.sql
+    │   ├── 03_email_log.sql
+    │   ├── 04_dim_date.sql
+    │   └── 05_views_extra.sql
+    │
+    ├── tests/
+    │   ├── test_analytics.py          # 21 tests — analytics core
+    │   ├── test_email_parser.py
+    │   ├── test_pdf_extractor.py
+    │   └── test_validator.py
+    │
+    ├── data/
+    │   ├── raw/emails/ → ../../de_thi/emails/   # symlink (gitignored)
+    │   └── raw/pdfs/   → ../../de_thi/pdfs/     # symlink (gitignored)
+    │
+    └── output/
+        ├── data/                      # Dữ liệu thực tế (không có dự báo / ML output)
+        │   ├── raw_history.csv        # 17,031 rows — Q1-2025 + Q1-Feb2026 từ SQL
+        │   ├── raw_t3_orders.csv      #  8,559 rows — T3/2026 từ email pipeline
+        │   ├── kpi_overview.csv       #     12 rows — 12 KPI tổng hợp
+        │   ├── monthly_trend.csv      #     36 rows — tháng × nhóm: DT, SL, YoY, MoM
+        │   ├── product_analysis.csv   #    161 rows — SKU: Pareto A/B/C, BCG, YoY
+        │   ├── color_analysis.csv     #    328 rows — màu × nhóm × tháng
+        │   ├── color_history.csv      #    329 rows — tỷ trọng màu theo tháng
+        │   ├── dealer_rfm.csv         #    333 rows — đại lý: RFM features & segments
+        │   ├── geo_province.csv       #     74 rows — tỉnh: DT, rank, share
+        │   ├── geo_region.csv         #     20 rows — vùng × nhóm SP
+        │   ├── ops_pipeline.csv       #      8 rows — thống kê pipeline email T3
+        │   └── ops_daily.csv          #     31 rows — DT + đơn mỗi ngày T3/2026
+        │
+        └── prediction/                # Dữ liệu dự báo & ML output
+            ├── dealer_churn.csv       #    333 rows — LogReg: P(churn), nhãn, train/test
+            ├── dealer_activity.csv    #    703 rows — P(đặt hàng 30 ngày tới)
+            ├── revenue_q2_daily.csv   #  1,041 rows — Prophet: dự báo daily Q2/2026
+            ├── revenue_q2_monthly.csv #     49 rows — Prophet: dự báo monthly Q2/2026
+            └── color_q2.csv          #    183 rows — dự báo tỷ trọng màu Q2/2026
 ```
 
 ---
 
 ## Output CSV
 
-### `output/master/fact_full.csv` — 17.031 rows × 48 cols
-Mỗi row = 1 dòng order line + toàn bộ enrichment join về:
+### `output/data/` — Dữ liệu thực tế (12 file)
 
-| Nhóm cột | Nội dung |
-|---|---|
-| Giao dịch | order_id, so_number, product_code, quantity, unit_price, line_total |
-| Thời gian | order_date, fiscal_year/month/quarter, ym, period_label, day_of_week |
-| Đơn hàng | order_total, n_lines_in_order, line_share_of_order_pct |
-| Địa lý | customer_code/name, province_name, region |
-| Sản phẩm | product_name, color, line_name, group_code/name |
-| SKU metrics | sku_revenue_rank, sku_pareto_class, sku_bcg_quadrant, sku_yoy_rev_pct |
-| Khách hàng | cust_cohort_month, cust_rfm_r/f/m, cust_rfm_segment |
-| Churn ML | cust_churn_label, cust_churn_prob, cust_churn_priority |
-
-### `output/master/agg_master.csv` — 2.097 rows × 70 cols
-Tất cả aggregations trong 1 file — dùng cột `grain` để lọc:
-
-| `grain` | Mô tả | Dùng để vẽ |
+| File | Rows | Mô tả |
 |---|---|---|
-| `monthly_group_region` | Tháng × nhóm SP × vùng | Line chart, area trend |
-| `monthly_group` | Tháng × nhóm SP (tổng) | Bar trend, MoM/YoY |
-| `monthly_region` | Tháng × vùng | Regional trend |
-| `monthly_total` | Tổng quốc gia theo tháng | KPI trend |
-| `province_group` | Tỉnh × nhóm SP | Heatmap |
-| `province_total` | Tổng theo tỉnh | Map, bar chart tỉnh |
-| `region_group` | Vùng × nhóm SP | Stacked bar |
-| `region_total` | Tổng theo vùng | Pie/donut |
-| `national_group` | Quốc gia × nhóm SP | Summary bar |
-| `national_total` | Tổng toàn quốc | Single KPI |
-| `sku` | Từng SKU (161 sản phẩm) | BCG bubble, Pareto, top SKU |
-| `customer` | Từng khách hàng (333) | Churn table, RFM scatter |
-| `forecast_daily` | Dự báo daily × nhóm SP | Forecast band chart |
+| `raw_history.csv` | 17,031 | Order line thô — Q1-2025 + Q1-Feb2026 từ SQL |
+| `raw_t3_orders.csv` | 8,559 | Order line thô — T3/2026 từ email pipeline |
+| `kpi_overview.csv` | 12 | KPI: doanh thu, đơn hàng, đại lý, T3 stats |
+| `monthly_trend.csv` | 36 | Tháng × nhóm SP: DT, SL, YoY, MoM, YTD |
+| `product_analysis.csv` | 161 | SKU: Pareto A/B/C, BCG (Ngôi sao/Bò sữa/Dấu hỏi/Con chó), YoY |
+| `color_analysis.csv` | 328 | Màu × nhóm × tháng: DT, SL |
+| `color_history.csv` | 329 | Tỷ trọng (%) màu sắc theo tháng |
+| `dealer_rfm.csv` | 333 | Đại lý: recency, frequency, monetary, RFM segment |
+| `geo_province.csv` | 74 | Tỉnh: DT, rank quốc gia + vùng, share % |
+| `geo_region.csv` | 20 | Vùng × nhóm SP |
+| `ops_pipeline.csv` | 8 | Pipeline T3: tổng email, OK, lỗi, tỷ lệ |
+| `ops_daily.csv` | 31 | Đơn hàng + doanh thu từng ngày T3/2026 |
+
+### `output/prediction/` — Dự báo & ML output (5 file)
+
+| File | Rows | Mô tả |
+|---|---|---|
+| `dealer_churn.csv` | 333 | LogReg: P(churn), churn_priority, train/test split, ROC-AUC |
+| `dealer_activity.csv` | 703 | P(đặt hàng trong 30 ngày tới), activity_risk, priority_contact |
+| `revenue_q2_daily.csv` | 1,041 | Prophet: yhat/lower/upper theo ngày × nhóm SP (Q2/2026) |
+| `revenue_q2_monthly.csv` | 49 | Prophet: tổng hợp theo tháng × nhóm SP |
+| `color_q2.csv` | 183 | Dự báo DT theo màu × nhóm × tháng Q2 (share-based) |
 
 ```python
-# Ví dụ dùng trong Dash
-# QUAN TRỌNG: product_code phải đọc là string để giữ leading zeros
+# Đọc CSV — QUAN TRỌNG: product_code phải là string để giữ leading zeros
 STR_COLS = {"product_code": str}
-df   = pd.read_csv("output/master/agg_master.csv",  dtype=STR_COLS)
-fact = pd.read_csv("output/master/fact_full.csv",   dtype=STR_COLS)
 
-monthly  = df[df.grain == "monthly_group_region"]
-province = df[df.grain == "province_total"]
-sku      = df[df.grain == "sku"]
-customer = df[df.grain == "customer"]
-forecast = df[df.grain == "forecast_daily"]
+# Dữ liệu thực tế
+kpi     = pd.read_csv("output/data/kpi_overview.csv")
+monthly = pd.read_csv("output/data/monthly_trend.csv")
+sku     = pd.read_csv("output/data/product_analysis.csv", dtype=STR_COLS)
+dealer  = pd.read_csv("output/data/dealer_rfm.csv")
+
+# Dự báo & ML
+churn    = pd.read_csv("output/prediction/dealer_churn.csv")
+fcst     = pd.read_csv("output/prediction/revenue_q2_monthly.csv")
+activity = pd.read_csv("output/prediction/dealer_activity.csv")
+
+# Join churn vào dealer khi cần cả RFM + churn
+dealer_full = dealer.merge(churn, on="customer_code", how="left")
 ```
 
 ---
@@ -105,23 +151,48 @@ forecast = df[df.grain == "forecast_daily"]
 ```bash
 pip install -r requirements.txt
 
-# Tạo 2 CSV dashboard
-python tnbike_analytics/export_master.py
+# Giải nén dữ liệu email/PDF (nếu chưa có)
+cd de_thi
+unrar e tnbike_emails_mar2026.rar emails/
+unrar e tnbike_pdfs_mar2026.rar   pdfs/
+
+# Sinh toàn bộ CSV (data/ + prediction/)
+cd tnbike_analytics
+python export_csv.py
+
+# Chạy dashboard (6 trang)
+cd dashboard && python index.py
+# → http://localhost:8050
 
 # Chạy tests
-cd tnbike_analytics && pytest tests/
+pytest tests/
 ```
 
-**Output mẫu:**
+**Output mẫu `export_csv.py`:**
 ```
-INFO  0. Loading fact table from SQL...
-INFO     17,031 rows | 2025-01-02 → 2026-02-28
-INFO  1. Computing SKU enrichment...
-INFO  2. Computing customer RFM + Churn ML...
-INFO     ROC-AUC (held-out test): 0.841
-INFO  3. Running Prophet forecast...
-INFO  4. Building fact_full.csv...   → 17,031 rows × 48 cols
-INFO  5. Building agg_master.csv...  →  2,097 rows × 70 cols
+INFO  Loading data...
+INFO     T3: 1112 orders OK | 20 lỗi | 8559 order lines | revenue=39,909,335,753
+INFO  === DATA/ ===
+INFO    raw_history.csv           17,031 rows
+INFO    raw_t3_orders.csv          8,559 rows  (1112 orders)
+INFO    kpi_overview.csv             12 rows
+INFO    monthly_trend.csv            36 rows
+INFO    product_analysis.csv        161 rows
+INFO    color_analysis.csv          328 rows
+INFO    color_history.csv           329 rows
+INFO    dealer_rfm.csv              333 rows
+INFO    geo_province.csv             74 rows
+INFO    geo_region.csv               20 rows
+INFO    ops_pipeline.csv               8 rows
+INFO    ops_daily.csv                 31 rows
+INFO  === PREDICTION/ ===
+INFO     Churn model ROC-AUC test: 0.775
+INFO    dealer_churn.csv            333 rows
+INFO     Prophet: 6 groups
+INFO    revenue_q2_daily.csv      1,041 rows
+INFO    revenue_q2_monthly.csv       49 rows
+INFO    color_q2.csv                183 rows
+INFO    dealer_activity.csv         703 rows
 ```
 
 ---
@@ -131,15 +202,11 @@ INFO  5. Building agg_master.csv...  →  2,097 rows × 70 cols
 Yêu cầu: PostgreSQL + file .eml/.pdf trong `data/raw/`
 
 ```bash
-# Cấu hình DB
-cp .env.example .env  # sửa thông tin PostgreSQL
-
-# Khởi tạo schema
+cp .env.example .env   # sửa thông tin PostgreSQL
 psql -U postgres -d tnbike_db -f sql/01_create_tables.sql
 psql -U postgres -d tnbike_db -f sql/02_import_data.sql
 psql -U postgres -d tnbike_db -f sql/03_email_log.sql
 
-# Chạy pipeline
 python -m pipeline.run_pipeline \
   --email-dir data/raw/emails \
   --pdf-dir   data/raw/pdfs
@@ -149,18 +216,24 @@ python -m pipeline.run_pipeline \
 
 ## ML / Forecast
 
-### Churn Prediction (customer grain)
+### Churn Prediction → `prediction/dealer_churn.csv`
 - **Feature period:** Q1-2025 (Jan–Mar 2025)
 - **Label:** khách hàng không mua lại trong Q1-2026 → churn = 1
-- **Model:** `Pipeline(StandardScaler + LogisticRegression)` — không data leakage
+- **Model:** `Pipeline(StandardScaler + LogisticRegression(C=1.0))` — không data leakage
 - **Split:** 80/20 StratifiedShuffleSplit
-- **ROC-AUC held-out test: 0.841**
+- **ROC-AUC held-out test: 0.775**
 
-### Demand Forecast (forecast_daily grain)
-- **Train:** 2025-01 → 2026-01
-- **Test (backtest):** 2026-02 (so sánh với thực tế)
-- **Forecast:** 2026-03 → 2026-06
-- **Model:** Prophet (logistic growth + VN holidays, yearly_seasonality=False)
+### Dealer Activity → `prediction/dealer_activity.csv`
+- **Model:** cùng LogReg pipeline, áp dụng cho toàn bộ 703 đại lý
+- **Output:** `prob_active_30d`, `activity_risk`, `priority_contact`
+
+### Demand Forecast → `prediction/revenue_q2_*.csv`
+- **Train:** Jan 2025 → Mar 2026 (daily, per nhóm SP)
+- **Forecast:** Apr–Jun 2026 (Q2/2026)
+- **Model:** Prophet (logistic growth + VN holidays, weekly_seasonality=True)
+
+### Color Forecast → `prediction/color_q2.csv`
+- Dùng tỷ trọng màu trung bình Q1-2026 nhân với Prophet yhat Q2
 
 ---
 
@@ -194,7 +267,8 @@ python -m pipeline.run_pipeline \
 | Layer | Công nghệ |
 |---|---|
 | Data source | SQL file (không cần DB để analytics) |
-| Analytics / ML | pandas, scikit-learn, prophet |
-| Dashboard | Dash / Plotly (dùng output/master/*.csv) |
-| Pipeline A | psycopg2, pdftotext (poppler) |
-| Tests | pytest (36 tests total) |
+| Email pipeline | Python `email`, pdftotext (poppler) |
+| Analytics / ML | pandas, scikit-learn (LogisticRegression), prophet |
+| Dashboard | Dash 4.x / Plotly + Dash Bootstrap Components |
+| Pipeline A (DB) | psycopg2, pdftotext (poppler) |
+| Tests | pytest (21 tests analytics core) |

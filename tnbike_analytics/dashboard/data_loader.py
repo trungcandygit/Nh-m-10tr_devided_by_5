@@ -12,20 +12,23 @@ def _csv(subdir, name, **kw):
 
 def load_all():
     return {
-        "kpi":            _csv("dashboard", "01_kpi_overview.csv"),
-        "monthly":        _csv("dashboard", "02_monthly_trend.csv"),
-        "sku":            _csv("dashboard", "03_product_analysis.csv"),
-        "color":          _csv("dashboard", "03_color_analysis.csv"),
-        "dealer":         _csv("dashboard", "04_dealer_rfm.csv"),
-        "province":       _csv("dashboard", "05_geo_province.csv"),
-        "region":         _csv("dashboard", "05_geo_region.csv"),
-        "ops_pipeline":   _csv("dashboard", "06_ops_pipeline.csv"),
-        "ops_daily":      _csv("dashboard", "06_ops_daily.csv"),
-        "fcst_daily":     _csv("forecast",  "c1_revenue_q2_daily.csv"),
-        "fcst_monthly":   _csv("forecast",  "c1_revenue_q2_monthly.csv"),
-        "color_fcst":     _csv("forecast",  "c2_color_q2.csv"),
-        "color_hist":     _csv("forecast",  "c2_color_history.csv"),
-        "dealer_activity":_csv("forecast",  "c3_dealer_activity.csv"),
+        # ── data/ — dữ liệu thực tế ──────────────────────
+        "kpi":           _csv("data", "kpi_overview.csv"),
+        "monthly":       _csv("data", "monthly_trend.csv"),
+        "sku":           _csv("data", "product_analysis.csv"),
+        "color":         _csv("data", "color_analysis.csv"),
+        "color_hist":    _csv("data", "color_history.csv"),
+        "dealer":        _csv("data", "dealer_rfm.csv"),
+        "province":      _csv("data", "geo_province.csv"),
+        "region":        _csv("data", "geo_region.csv"),
+        "ops_pipeline":  _csv("data", "ops_pipeline.csv"),
+        "ops_daily":     _csv("data", "ops_daily.csv"),
+        # ── prediction/ — ML & Prophet output ────────────
+        "dealer_churn":   _csv("prediction", "dealer_churn.csv"),
+        "dealer_activity":_csv("prediction", "dealer_activity.csv"),
+        "fcst_daily":     _csv("prediction", "revenue_q2_daily.csv"),
+        "fcst_monthly":   _csv("prediction", "revenue_q2_monthly.csv"),
+        "color_fcst":     _csv("prediction", "color_q2.csv"),
     }
 
 DATA = load_all()
