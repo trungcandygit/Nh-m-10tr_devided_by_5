@@ -17,11 +17,15 @@ output/
 │   └── ops_daily.csv             # DT + đơn mỗi ngày T3                         31 rows
 │
 └── prediction/                   # Dữ liệu dự báo & ML output
-    ├── dealer_churn.csv          # Churn LogReg: P(churn), nhãn, train/test    333 rows
-    ├── dealer_activity.csv       # Xác suất đại lý đặt hàng 30 ngày tới       703 rows
     ├── revenue_q2_daily.csv      # Prophet: dự báo doanh thu daily Q2        1,041 rows
-    ├── revenue_q2_monthly.csv    # Prophet: dự báo doanh thu monthly Q2         49 rows
-    └── color_q2.csv              # Dự báo tỷ trọng màu Q2                      183 rows
+    ├── revenue_q2_monthly.csv    # Prophet: tháng × nhóm SP                     49 rows
+    ├── revenue_q2_weekly.csv     # Prophet: tuần × nhóm SP (Q2 only)            ~78 rows
+    ├── sku_q2_forecast.csv       # Top-20 SKU dự báo bán chạy Q2               ~500 rows
+    ├── color_q2.csv              # Màu × nhóm × tháng Q2 + seasonal_trend      183 rows
+    ├── sku_cluster.csv           # K-Means cluster + slow_mover_risk            161 rows
+    ├── dealer_churn.csv          # LightGBM: P(churn), nhãn, SHAP              333 rows
+    ├── dealer_activity.csv       # BG-NBD: prob_purchase_30d + priority         333 rows
+    └── shap_importance.csv       # SHAP feature importance ranking                9 rows
 """
 
 import csv, sys, warnings, logging
