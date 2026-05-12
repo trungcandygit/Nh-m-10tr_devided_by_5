@@ -152,37 +152,12 @@ unrar e tnbike_pdfs_mar2026.rar   pdfs/
 cd tnbike_analytics
 python export_csv.py
 
-# Chạy tests (36 pass → 52 pass sau khi thêm test_prediction_engine)
+# Chạy tests
 pytest tests/ -v
 
 # Chạy dashboard (6 trang)
 cd dashboard && python index.py
 # → http://localhost:8050
-```
-
-**Output mẫu `export_csv.py`:**
-```
-INFO  Loading data...
-INFO     T3: 1112 orders OK | 20 lỗi | 8559 order lines | revenue=39,909,335,753
-INFO  === DATA/ ===
-INFO    raw_history.csv           17,031 rows
-INFO    raw_t3_orders.csv          8,559 rows  (1112 orders)
-INFO    kpi_overview.csv             12 rows
-INFO    ...
-INFO    dealer_rfm.csv              333 rows
-INFO  === PREDICTION/ ===
-INFO    BG-NBD fit: 403 đại lý
-INFO    LightGBM churn ROC-AUC test: 0.843
-INFO    SHAP top feature: revenue_q1_2025 (importance=0.5333)
-INFO    Prophet: 5 nhóm SP
-INFO    revenue_q2_daily.csv        924 rows
-INFO    revenue_q2_weekly.csv        70 rows
-INFO    sku_q2_forecast.csv         363 rows  (top20: 60)
-INFO    color_q2.csv               180 rows  (seasonal_trend)
-INFO    sku_cluster.csv            161 rows  (slow-mover: 79)
-INFO    dealer_churn.csv            333 rows
-INFO    dealer_activity.csv         333 rows
-INFO    shap_importance.csv           6 rows
 ```
 
 ---
@@ -196,7 +171,6 @@ INFO    shap_importance.csv           6 rows
 | **Model** | Prophet (logistic growth, VN holidays, weekly seasonality) |
 | **Train** | 2025-01-01 → 2026-03-31 (daily per nhóm SP) |
 | **Forecast** | Apr–Jun 2026 (Q2/2026) |
-| **Granularity** | Daily → tổng hợp monthly + weekly |
 | **Top-20 SKU** | Phân bổ group yhat xuống SKU theo tỷ trọng Q1-2026 |
 | **Output** | `yhat`, `yhat_lower`, `yhat_upper`, `split`=train/forecast |
 
@@ -204,10 +178,9 @@ INFO    shap_importance.csv           6 rows
 
 | Thành phần | Chi tiết |
 |---|---|
-| **Seasonal trend** | So sánh tỷ trọng màu Q1-2025 vs Q1-2026: "Tăng/Giảm/Ổn định" (ngưỡng ±0.5%) |
+| **Seasonal trend** | So sánh tỷ trọng màu Q1-2025 vs Q1-2026: Tăng/Giảm/Ổn định (ngưỡng ±0.5%) |
 | **K-Means** | k=4 clusters: Ngôi sao / Bò sữa / Dấu hỏi / Bán chậm |
-| **Slow-mover** | Cluster "Bán chậm" HOẶC YoY < -10% → `slow_mover_risk` = "Nguy cơ cao" |
-| **Features** | revenue, quantity, n_orders, n_months_active, yoy_rev_pct, avg_monthly_rev |
+| **Slow-mover** | Cluster Bán chậm HOẶC YoY < -10% → `slow_mover_risk` = Nguy cơ cao |
 
 ### Q3 — Dự báo hoạt động đại lý → `dealer_activity.csv` + `dealer_churn.csv`
 
@@ -217,12 +190,7 @@ INFO    shap_importance.csv           6 rows
 | **LightGBM** | Churn prediction, ROC-AUC test = **0.843** |
 | **SHAP** | Feature importance — top: revenue_q1_2025 |
 | **Feature period** | Q1-2025 (≤ 2025-03-31) — không data leakage |
-| **Label** | Churn = không mua lại trong 2026 |
-| **Split** | 80/20 StratifiedShuffleSplit |
 | **Features (6)** | recency_days, n_orders_q1_2025, revenue_q1_2025, avg_order_value, n_product_groups, trend_slope |
-| **marketing_priority** | 1=Ưu tiên cao (churn≥0.6 + trend<40), 2=Trung bình, 3=Thấp |
-
-> **Lưu ý data integrity**: `active_in_t3`, `revenue_total`, `n_orders_total` bị loại khỏi features vì dùng data sau FEAT_END — sẽ gây data leakage (test `test_q3_no_leakage_auc_ceiling` kiểm tra AUC < 0.99).
 
 ---
 
@@ -230,101 +198,14 @@ INFO    shap_importance.csv           6 rows
 
 ```
 tests/
-├── test_analytics.py          # 20 tests — data loading, RFM, aggregation, YoY
+├── test_analytics.py          # 20 tests — data loading, RFM, aggregation
 ├── test_prediction_engine.py  # 32 tests — Q1/Q2/Q3 model validation
-├── test_email_parser.py       #  5 tests (8 skip nếu không có .eml)
-├── test_pdf_extractor.py      #  6 tests (5 skip nếu không có .pdf)
-└── test_validator.py          #  5 tests
+├── test_email_parser.py
+├── test_pdf_extractor.py
+test_validator.py
 ```
 
-**Kết quả test_prediction_engine.py (32 tests):**
-
-| Nhóm | Test | Kiểm tra |
-|---|---|---|
-| Q1 | 8 tests | Columns, groups, date range, yhat≥0, top20 count, revenue bounds |
-| Q2 | 8 tests | Seasonal trend labels, cluster labels, slow_mover flags, share sums |
-| Q3 | 16 tests | prob∈[0,1], ROC-AUC 0.65–0.99, split 80/20, SHAP count, RFM range |
-
-Metrics được ghi tự động vào `output/test_report.md` sau khi chạy `pytest tests/test_prediction_engine.py`.
-
----
-
-## Đọc CSV
-
-```python
-import pandas as pd
-
-STR_COLS = {"product_code": str}  # giữ leading zeros
-
-# Dữ liệu thực tế
-kpi     = pd.read_csv("output/data/kpi_overview.csv")
-monthly = pd.read_csv("output/data/monthly_trend.csv")
-sku     = pd.read_csv("output/data/product_analysis.csv", dtype=STR_COLS)
-dealer  = pd.read_csv("output/data/dealer_rfm.csv")
-
-# Dự báo Q1
-fcst_daily   = pd.read_csv("output/prediction/revenue_q2_daily.csv")
-fcst_monthly = pd.read_csv("output/prediction/revenue_q2_monthly.csv")
-fcst_weekly  = pd.read_csv("output/prediction/revenue_q2_weekly.csv")
-sku_q2       = pd.read_csv("output/prediction/sku_q2_forecast.csv", dtype=STR_COLS)
-
-# Dự báo Q2
-color_q2    = pd.read_csv("output/prediction/color_q2.csv")
-sku_cluster = pd.read_csv("output/prediction/sku_cluster.csv", dtype=STR_COLS)
-
-# Dự báo Q3
-churn    = pd.read_csv("output/prediction/dealer_churn.csv")
-activity = pd.read_csv("output/prediction/dealer_activity.csv")
-shap_imp = pd.read_csv("output/prediction/shap_importance.csv")
-
-# Join dealer RFM + churn + activity (full view)
-dealer_full = dealer.merge(churn, on="customer_code", how="left") \
-                    .merge(activity[["customer_code","prob_purchase_30d",
-                                     "expected_orders_30d","marketing_priority_label"]],
-                           on="customer_code", how="left")
-```
-
----
-
-## Pipeline A — Xử lý email T3/2026
-
-Yêu cầu: PostgreSQL + file .eml/.pdf trong `data/raw/`
-
-```bash
-cp .env.example .env   # sửa thông tin PostgreSQL
-psql -U postgres -d tnbike_db -f sql/01_create_tables.sql
-psql -U postgres -d tnbike_db -f sql/02_import_data.sql
-psql -U postgres -d tnbike_db -f sql/03_email_log.sql
-
-python -m pipeline.run_pipeline \
-  --email-dir data/raw/emails \
-  --pdf-dir   data/raw/pdfs
-```
-
----
-
-## Schema
-
-| Bảng | Mô tả |
-|---|---|
-| `product_group` | 5 nhóm sản phẩm |
-| `product_line` | 72 dòng xe |
-| `product` | 247 SKU |
-| `province` | 63 tỉnh thành |
-| `customer` | 702 đại lý |
-| `sales_order` | Đầu phiếu bán hàng |
-| `order_line` | Dòng hàng hóa |
-| `email_log` | Log pipeline A |
-
-**5 nhóm sản phẩm:**
-
-| Code | Tên |
-|---|---|
-| `CITYBIKE_P` | Xe phổ thông |
-| `KIDBIKE_1` | Xe trẻ em nhóm 1 |
-| `KIDBIKE_2` | Xe trẻ em nhóm 2 |
-| `SPORTBIKE_S` | Xe thể thao khung thép |
-| `SPORTBIKE_A` | Xe thể thao khung nhôm |
+Metrics được ghi tự động vào `output/test_report.md` sau khi chạy `pytest`.
 
 ---
 
