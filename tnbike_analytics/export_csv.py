@@ -24,7 +24,7 @@ output/
     ├── color_q2.csv              # Màu × nhóm × tháng Q2 + seasonal_trend      183 rows
     ├── sku_cluster.csv           # K-Means cluster + slow_mover_risk            161 rows
     ├── dealer_churn.csv          # LightGBM: P(churn), nhãn, SHAP              333 rows
-    ├── dealer_activity.csv       # BG-NBD: prob_purchase_30d + priority         333 rows
+    ├── dealer_activity.csv       # BG-NBD: prob_purchase_30d + RFM + priority   333 rows
     └── shap_importance.csv       # SHAP feature importance ranking                9 rows
 """
 
@@ -48,9 +48,9 @@ for p in [OUT_DATA, OUT_PRED]:
 
 QW = dict(index=False, encoding="utf-8-sig", quoting=csv.QUOTE_NONNUMERIC)
 
-# ════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════
 # LOAD
-# ════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════
 log.info("Loading data...")
 dfs  = load_all()
 fact_hist = build_fact(dfs)
@@ -67,12 +67,12 @@ fact["ym"]           = fact["order_date"].dt.to_period("M").astype(str)
 
 FEAT_END = pd.Timestamp("2025-03-31")
 
-# ════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════
 # DATA/ — Dữ liệu thực tế (không dự báo)
-# ════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════
 log.info("=== DATA/ ===")
 
-# ── raw_history.csv ─────────────────────────────────
+# ── raw_history.csv ───────────────────────────────────
 raw_hist = fact_hist[[
     "so_number","order_date","fiscal_year","fiscal_month","fiscal_quarter",
     "customer_code","customer_name","province_name","region",
@@ -92,7 +92,7 @@ raw_t3 = t3[[
 raw_t3.to_csv(OUT_DATA / "raw_t3_orders.csv", **QW)
 log.info(f"  raw_t3_orders.csv        {len(raw_t3):>7,} rows  ({raw_t3['so_number'].nunique()} orders)")
 
-# ── kpi_overview.csv ────────────────────────────────
+# ── kpi_overview.csv ──────────────────────────────────
 nat_rev  = int(fact["line_total"].sum())
 hist_rev = int(fact_hist["line_total"].sum())
 t3_rev   = int(t3["line_total"].sum()) if not t3.empty else 0
@@ -114,7 +114,7 @@ kpi = pd.DataFrame([
 kpi.to_csv(OUT_DATA / "kpi_overview.csv", **QW)
 log.info(f"  kpi_overview.csv            {len(kpi):>3} rows")
 
-# ── monthly_trend.csv ───────────────────────────────
+# ── monthly_trend.csv ─────────────────────────────────
 monthly = (fact.groupby(["fiscal_year","fiscal_month","fiscal_quarter","ym","group_code","group_name"])
            .agg(revenue=("line_total","sum"), quantity=("quantity","sum"),
                 n_orders=("so_number","nunique"), n_customers=("customer_code","nunique"))
@@ -139,7 +139,7 @@ monthly["cum_revenue_ytd"]  = monthly.groupby(["group_code","fiscal_year"])["rev
 monthly.to_csv(OUT_DATA / "monthly_trend.csv", **QW)
 log.info(f"  monthly_trend.csv           {len(monthly):>3} rows")
 
-# ── product_analysis.csv ────────────────────────────
+# ── product_analysis.csv ────────────────────────────────
 sku = (fact.groupby(["product_code","product_name","color","line_name","group_code","group_name"])
        .agg(revenue=("line_total","sum"), quantity=("quantity","sum"),
             n_orders=("so_number","nunique"), n_customers=("customer_code","nunique"))
@@ -181,7 +181,7 @@ sku = pd.concat(bcg_parts, ignore_index=True)
 sku.to_csv(OUT_DATA / "product_analysis.csv", **QW)
 log.info(f"  product_analysis.csv       {len(sku):>4} rows")
 
-# ── color_analysis.csv ──────────────────────────────
+# ── color_analysis.csv ─────────────────────────────────
 color_agg = (fact.groupby(["color","group_code","group_name","fiscal_year","fiscal_month"])
              .agg(revenue=("line_total","sum"), quantity=("quantity","sum"),
                   n_orders=("so_number","nunique"))
@@ -222,7 +222,7 @@ rfm_save = [c for c in rfm_cols if c in dealer_act.columns]
 dealer_act[rfm_save].to_csv(OUT_DATA / "dealer_rfm.csv", **QW)
 log.info(f"  dealer_rfm.csv             {len(dealer_act):>4} rows")
 
-# ── geo_province.csv & geo_region.csv ───────────────
+# ── geo_province.csv & geo_region.csv ───────────────────
 nat_rev_total = int(fact["line_total"].sum())
 prov = (fact.groupby(["province_name","region"])
         .agg(revenue=("line_total","sum"), quantity=("quantity","sum"),
@@ -246,7 +246,7 @@ region.to_csv(OUT_DATA / "geo_region.csv", **QW)
 log.info(f"  geo_province.csv            {len(prov):>3} rows")
 log.info(f"  geo_region.csv              {len(region):>3} rows")
 
-# ── ops_pipeline.csv & ops_daily.csv ────────────────
+# ── ops_pipeline.csv & ops_daily.csv ────────────────────
 ops = pd.DataFrame([
     {"metric":"tong_email_nhan",      "value":1132,                               "mo_ta":"Tổng email nhận T3/2026"},
     {"metric":"don_xu_ly_thanh_cong", "value":raw_t3["so_number"].nunique(),       "mo_ta":"Đơn xử lý thành công"},
@@ -266,12 +266,12 @@ t3_by_day.to_csv(OUT_DATA / "ops_daily.csv", **QW)
 log.info(f"  ops_pipeline.csv              {len(ops):>2} rows")
 log.info(f"  ops_daily.csv                 {len(t3_by_day):>2} rows")
 
-# ════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════
 # PREDICTION/ — Q1 + Q2 + Q3 qua prediction_engine
-# ════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════
 log.info("=== PREDICTION/ ===")
 
-# ── Q1: Prophet forecast ─────────────────────────────
+# ── Q1: Prophet forecast ──────────────────────────────────
 log.info("  [Q1] Chạy Prophet forecast...")
 q1_out = run_q1_forecast(fact)
 
@@ -288,7 +288,7 @@ q1_out["sku_q2"].to_csv(OUT_PRED / "sku_q2_forecast.csv", **QW)
 top20 = q1_out["sku_q2"]["top20_flag"].sum() if "top20_flag" in q1_out["sku_q2"].columns else "?"
 log.info(f"  sku_q2_forecast.csv        {len(q1_out['sku_q2']):>4} rows  (top20: {top20})")
 
-# ── Q2: Color demand + K-Means slow-mover ────────────
+# ── Q2: Color demand + K-Means slow-mover ─────────────────
 log.info("  [Q2] Chạy color demand + K-Means...")
 q2_out = run_q2_color_demand(fact, q1_out["monthly"])
 
@@ -302,16 +302,18 @@ q2_out["sku_cluster"].to_csv(OUT_PRED / "sku_cluster.csv", **QW)
 slow = (q2_out["sku_cluster"]["slow_mover_risk"] == "Nguy cơ cao").sum()
 log.info(f"  sku_cluster.csv            {len(q2_out['sku_cluster']):>4} rows  (slow-mover: {slow})")
 
-# ── Q3: BG-NBD + LightGBM + SHAP ────────────────────
+# ── Q3: BG-NBD + LightGBM + SHAP ──────────────────────
 # (q3_out đã chạy ở trên khi build dealer_rfm.csv)
 q3_out["dealer_churn"].to_csv(OUT_PRED / "dealer_churn.csv", **QW)
 log.info(f"  dealer_churn.csv           {len(q3_out['dealer_churn']):>4} rows")
 
-# dealer_activity: lưu các cột cần thiết
+# dealer_activity: lưu toàn bộ cột cần cho dashboard
 act_cols = [
     "customer_code","customer_name","province_name","region",
-    "last_order_date","recency_days","n_orders_total","revenue_total",
-    "avg_order_value","n_product_groups","trend_slope","active_in_t3",
+    "recency_days","n_orders_q1_2025","revenue_q1_2025",
+    "avg_order_value","n_product_groups","trend_slope","groups_bought",
+    "n_orders_q1_2026","revenue_q1_2026","churn_label",
+    "rfm_r","rfm_f","rfm_m","rfm_segment",
     "prob_purchase_30d","expected_orders_30d","activity_risk","priority_contact",
     "trend_score","marketing_priority","marketing_priority_label",
 ]
@@ -322,9 +324,9 @@ log.info(f"  dealer_activity.csv        {len(dealer_act):>4} rows")
 q3_out["shap_importance"].to_csv(OUT_PRED / "shap_importance.csv", **QW)
 log.info(f"  shap_importance.csv          {len(q3_out['shap_importance']):>2} rows")
 
-# ════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════
 # SUMMARY
-# ════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════
 log.info("─"*60)
 log.info("✓ Xong! Tất cả CSV:")
 for d in [OUT_DATA, OUT_PRED]:
