@@ -1,0 +1,21 @@
+"region","group_code","group_name","revenue","quantity","n_orders","n_customers"
+"","CITYBIKE_P","Xe phổ thông",4059772628.0,2497.0,211,1
+"","KIDBIKE_1","Xe trẻ em nhóm 1",645460958.0,502.0,109,1
+"","KIDBIKE_2","Xe trẻ em nhóm 2",201425026.0,219.0,49,1
+"","SPORTBIKE_A","Xe thể thao nhôm",131777587.0,60.0,30,1
+"","SPORTBIKE_S","Xe thể thao thép",218869062.0,106.0,36,1
+"Miền Bắc","CITYBIKE_P","Xe phổ thông",40075677195.0,27586.0,1523,482
+"Miền Bắc","KIDBIKE_1","Xe trẻ em nhóm 1",8592890530.0,7077.0,878,341
+"Miền Bắc","KIDBIKE_2","Xe trẻ em nhóm 2",2415639263.0,3316.0,434,197
+"Miền Bắc","SPORTBIKE_A","Xe thể thao nhôm",2301306223.0,867.0,193,102
+"Miền Bắc","SPORTBIKE_S","Xe thể thao thép",3138929764.0,1769.0,332,174
+"Miền Nam","CITYBIKE_P","Xe phổ thông",2077406014.0,1073.0,115,3
+"Miền Nam","KIDBIKE_1","Xe trẻ em nhóm 1",686790075.0,407.0,77,2
+"Miền Nam","KIDBIKE_2","Xe trẻ em nhóm 2",779068919.0,697.0,83,2
+"Miền Nam","SPORTBIKE_A","Xe thể thao nhôm",146428334.0,42.0,2,1
+"Miền Nam","SPORTBIKE_S","Xe thể thao thép",472064082.0,184.0,37,2
+"Miền Trung","CITYBIKE_P","Xe phổ thông",10167578543.0,6871.0,313,101
+"Miền Trung","KIDBIKE_1","Xe trẻ em nhóm 1",1325958251.0,1075.0,149,72
+"Miền Trung","KIDBIKE_2","Xe trẻ em nhóm 2",371016294.0,442.0,64,33
+"Miền Trung","SPORTBIKE_A","Xe thể thao nhôm",296732260.0,104.0,28,20
+"Miền Trung","SPORTBIKE_S","Xe thể thao thép",350562446.0,184.0,48,36
