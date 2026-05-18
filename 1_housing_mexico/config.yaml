@@ -1,0 +1,26 @@
+database:
+  host: localhost
+  port: 5432
+  dbname: tnbike_db
+  user: tnbike_user
+  password: tnbike_pass
+  schema: tnbike
+
+queries:
+  main_table: fact_sales
+  date_range:
+    start: '2025-01-01'
+    end: '2026-03-31'
+
+project:
+  name: "TNBike Sales by Territory"
+  description: "Explore TNBike sales data by region/territory - Linear Regression"
+  target: total_amount
+  features:
+    - quantity
+    - unit_price
+    - discount
+
+visualization:
+  bar_color: steelblue
+  figure_size: [12, 6]

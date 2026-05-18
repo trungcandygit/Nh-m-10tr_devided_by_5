@@ -1,0 +1,29 @@
+database:
+  host: localhost
+  port: 5432
+  dbname: tnbike_db
+  user: tnbike_user
+  password: tnbike_pass
+  schema: tnbike
+
+queries:
+  main_table: fact_sales
+  join_table: dim_customer
+  date_range:
+    start: '2025-01-01'
+    end: '2026-03-31'
+
+project:
+  name: "TNBike Customer Churn / At-Risk Prediction"
+  description: "Predict at-risk customers using RandomForest with oversampling for class imbalance"
+  target: at_risk
+  churn_threshold_days: 90
+
+model:
+  n_estimators: 100
+  test_size: 0.2
+  random_state: 42
+  cv_folds: 5
+  param_grid:
+    n_estimators: [50, 100, 200]
+    max_depth: [3, 5, null]

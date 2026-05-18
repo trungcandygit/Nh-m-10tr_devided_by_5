@@ -1,0 +1,25 @@
+database:
+  host: localhost
+  port: 5432
+  dbname: tnbike_db
+  user: tnbike_user
+  password: tnbike_pass
+  schema: tnbike
+
+queries:
+  main_table: fact_sales
+  date_range:
+    start: '2025-01-01'
+    end: '2026-03-31'
+
+project:
+  name: "TNBike Revenue Volatility Forecasting"
+  description: "ARIMA + GARCH model for daily revenue volatility forecasting"
+  target: daily_revenue
+
+model:
+  arima_order: [1, 1, 1]
+  garch_p: 1
+  garch_q: 1
+  forecast_horizon: 30
+  rolling_window: 7

@@ -1,0 +1,24 @@
+database:
+  host: localhost
+  port: 5432
+  dbname: tnbike_db
+  user: tnbike_user
+  password: tnbike_pass
+  schema: tnbike
+
+queries:
+  main_table: sales_order
+  join_table: fact_sales
+  date_range:
+    start: '2025-01-01'
+    end: '2026-03-31'
+
+project:
+  name: "TNBike Discount Campaign A/B Test"
+  description: "Chi-square test on conversion rates for discount vs no-discount campaigns"
+  discount_threshold: 0.1
+  alpha: 0.05
+
+etl:
+  batch_size: 1000
+  staging_table: ab_test_staging

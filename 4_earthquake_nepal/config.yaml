@@ -1,0 +1,32 @@
+database:
+  host: localhost
+  port: 5432
+  dbname: tnbike_db
+  user: tnbike_user
+  password: tnbike_pass
+  schema: tnbike
+
+queries:
+  main_table: fact_sales
+  join_table: dim_customer
+  date_range:
+    start: '2025-01-01'
+    end: '2026-03-31'
+
+project:
+  name: "TNBike High-Value Order Classification"
+  description: "Binary classification of high-value orders using Logistic Regression and Decision Tree"
+  target: high_value
+  threshold: 500.0
+  features:
+    - quantity
+    - unit_price
+    - discount
+    - age
+    - income_category
+    - segment
+
+model:
+  test_size: 0.2
+  random_state: 42
+  max_depth: 5

@@ -1,9 +1,0 @@
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
-.env
-data/raw/
-data/processed/
-*.log
-_chart_refs/

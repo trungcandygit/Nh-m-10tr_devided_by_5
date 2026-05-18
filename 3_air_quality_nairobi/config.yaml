@@ -1,0 +1,24 @@
+database:
+  host: localhost
+  port: 5432
+  dbname: tnbike_db
+  user: tnbike_user
+  password: tnbike_pass
+  schema: tnbike
+
+queries:
+  main_table: fact_sales
+  date_range:
+    start: '2025-01-01'
+    end: '2026-03-31'
+
+project:
+  name: "TNBike Daily Revenue Time Series"
+  description: "Time series analysis of daily sales revenue - AR/ARMA model"
+  target: daily_revenue
+  aggregation: daily_sum
+
+model:
+  ar_lags: 3
+  arma_order: [2, 1]
+  walk_forward_steps: 30

@@ -1,0 +1,29 @@
+database:
+  host: localhost
+  port: 5432
+  dbname: tnbike_db
+  user: tnbike_user
+  password: tnbike_pass
+  schema: tnbike
+
+queries:
+  main_table: dim_customer
+  join_table: fact_sales
+  date_range:
+    start: '2025-01-01'
+    end: '2026-03-31'
+
+project:
+  name: "TNBike Customer Segmentation"
+  description: "K-Means clustering on customer data with PCA visualization"
+  features:
+    - age
+    - total_spend
+    - order_count
+    - avg_order_value
+
+model:
+  n_clusters: 4
+  pca_components: 2
+  random_state: 42
+  max_iter: 300

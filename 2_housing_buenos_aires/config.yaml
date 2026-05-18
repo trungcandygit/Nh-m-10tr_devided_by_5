@@ -1,0 +1,29 @@
+database:
+  host: localhost
+  port: 5432
+  dbname: tnbike_db
+  user: tnbike_user
+  password: tnbike_pass
+  schema: tnbike
+
+queries:
+  main_table: fact_sales
+  date_range:
+    start: '2025-01-01'
+    end: '2026-03-31'
+
+project:
+  name: "TNBike Sales Price Prediction"
+  description: "Predict total_amount using Ridge regression with product feature engineering"
+  target: total_amount
+  features:
+    - quantity
+    - unit_price
+    - discount
+    - category
+    - subcategory
+
+model:
+  ridge_alpha: 1.0
+  test_size: 0.2
+  random_state: 42
